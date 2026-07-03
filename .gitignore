@@ -1,5 +1,6 @@
 /target/
 /.cargo-home-temp/
+/.cargo-home-publish/
 /.worktrees/
 **/*.rs.bk
 *.pdb
