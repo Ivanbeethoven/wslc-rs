@@ -1,0 +1,195 @@
+use crate::{raw, strings, Error, Result, Session};
+
+/// Options for pulling an image.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImagePullOptions {
+    /// Image URI.
+    pub uri: String,
+    /// Optional registry auth.
+    pub registry_auth: Option<String>,
+}
+
+impl ImagePullOptions {
+    /// Creates pull options.
+    pub fn new(uri: impl Into<String>) -> Self {
+        Self {
+            uri: uri.into(),
+            registry_auth: None,
+        }
+    }
+
+    /// Sets a registry auth token.
+    pub fn registry_auth(mut self, registry_auth: impl Into<String>) -> Self {
+        self.registry_auth = Some(registry_auth.into());
+        self
+    }
+
+    /// Validates the options.
+    pub fn validate(&self) -> Result<()> {
+        if self.uri.trim().is_empty() {
+            return Err(Error::InvalidInput("image uri cannot be empty".to_owned()));
+        }
+        Ok(())
+    }
+}
+
+/// Pull operation builder.
+pub struct ImagePullOperation<'a> {
+    pub(crate) session: &'a Session,
+    pub(crate) options: ImagePullOptions,
+    pub(crate) progress: Option<Box<dyn FnMut(ImageProgress) + Send>>,
+}
+
+impl<'a> ImagePullOperation<'a> {
+    /// Registers a progress callback.
+    pub fn on_progress<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(ImageProgress) + Send + 'static,
+    {
+        self.progress = Some(Box::new(f));
+        self
+    }
+
+    /// Runs the pull operation.
+    pub fn run(mut self) -> Result<()> {
+        self.options.validate()?;
+        let sdk = raw::sdk()?;
+        let uri = strings::cstring(&self.options.uri, "image uri")?;
+        let registry_auth;
+        let registry_auth_ptr = if let Some(auth) = &self.options.registry_auth {
+            registry_auth = strings::cstring(auth, "registry_auth")?;
+            registry_auth.as_ptr()
+        } else {
+            std::ptr::null()
+        };
+
+        let mut progress = self
+            .progress
+            .take()
+            .map(|callback| ProgressCallback { callback });
+        let context = progress
+            .as_mut()
+            .map(|callback| callback as *mut ProgressCallback as wslc_sys::PVOID)
+            .unwrap_or(std::ptr::null_mut());
+
+        let options = wslc_sys::WslcPullImageOptions {
+            uri: uri.as_ptr(),
+            progressCallback: if context.is_null() {
+                None
+            } else {
+                Some(progress_trampoline)
+            },
+            progressCallbackContext: context,
+            registryAuth: registry_auth_ptr,
+        };
+        let mut error_message = std::ptr::null_mut();
+        let hr =
+            unsafe { (sdk.WslcPullSessionImage)(self.session.raw(), &options, &mut error_message) };
+        unsafe { raw::check_hr(hr, error_message) }
+    }
+}
+
+unsafe extern "system" fn progress_trampoline(
+    progress: *const wslc_sys::WslcImageProgressMessage,
+    context: wslc_sys::PVOID,
+) -> wslc_sys::HRESULT {
+    if progress.is_null() || context.is_null() {
+        return wslc_sys::S_OK;
+    }
+
+    let progress = unsafe { &*progress };
+    let event = ImageProgress {
+        id: unsafe { strings::c_ptr_to_string(progress.id) }.unwrap_or_default(),
+        status: progress.status.into(),
+        current_bytes: progress.detail.currentBytes,
+        total_bytes: progress.detail.totalBytes,
+    };
+    let callback = unsafe { &mut *(context as *mut ProgressCallback) };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (callback.callback)(event)));
+    wslc_sys::S_OK
+}
+
+struct ProgressCallback {
+    callback: Box<dyn FnMut(ImageProgress) + Send>,
+}
+
+/// Image progress event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImageProgress {
+    /// Layer ID or digest.
+    pub id: String,
+    /// Progress status.
+    pub status: ImageProgressStatus,
+    /// Current bytes.
+    pub current_bytes: u64,
+    /// Total bytes.
+    pub total_bytes: u64,
+}
+
+/// Image progress status.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageProgressStatus {
+    /// Unknown.
+    Unknown,
+    /// Pulling.
+    Pulling,
+    /// Waiting.
+    Waiting,
+    /// Downloading.
+    Downloading,
+    /// Verifying.
+    Verifying,
+    /// Extracting.
+    Extracting,
+    /// Complete.
+    Complete,
+}
+
+impl From<wslc_sys::WslcImageProgressStatus> for ImageProgressStatus {
+    fn from(value: wslc_sys::WslcImageProgressStatus) -> Self {
+        match value {
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_PULLING => Self::Pulling,
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_WAITING => Self::Waiting,
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_DOWNLOADING => {
+                Self::Downloading
+            }
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_VERIFYING => {
+                Self::Verifying
+            }
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_EXTRACTING => {
+                Self::Extracting
+            }
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_COMPLETE => {
+                Self::Complete
+            }
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// Image metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImageInfo {
+    /// Image name.
+    pub name: String,
+    /// SHA-256 digest bytes.
+    pub sha256: [u8; 32],
+    /// Size in bytes.
+    pub size_bytes: i64,
+    /// Creation time as Unix timestamp.
+    pub created_unix_time: u64,
+}
+
+impl TryFrom<wslc_sys::WslcImageInfo> for ImageInfo {
+    type Error = crate::Error;
+
+    fn try_from(value: wslc_sys::WslcImageInfo) -> Result<Self> {
+        let name = unsafe { strings::c_ptr_to_string(value.name.as_ptr()) }?;
+        Ok(Self {
+            name,
+            sha256: value.sha256,
+            size_bytes: value.sizeBytes,
+            created_unix_time: value.createdUnixTime,
+        })
+    }
+}

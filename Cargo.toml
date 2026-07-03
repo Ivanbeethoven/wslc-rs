@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/wslc",
+    "crates/wslc-sys",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hxy9243/wslc-rs"
+homepage = "https://github.com/hxy9243/wslc-rs"
+readme = "README.md"
+rust-version = "1.80"
+keywords = ["wsl", "containers", "windows", "ffi"]
+categories = ["api-bindings", "os::windows-apis"]
+
+[workspace.dependencies]
+wslc-sys = { version = "0.1.0", path = "crates/wslc-sys" }

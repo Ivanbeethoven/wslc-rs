@@ -1,0 +1,1 @@
+根据这个目标 尝试编写一个质量高的crates ，并上传github/crates.io, 我 帮你配置好了gh/cargo login/.

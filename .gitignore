@@ -1,0 +1,6 @@
+/target/
+/.worktrees/
+**/*.rs.bk
+*.pdb
+*.ilk
+*.exe
