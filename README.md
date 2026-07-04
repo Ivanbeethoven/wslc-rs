@@ -80,6 +80,10 @@ wslc version
 cargo test -p wslc --features integration --test integration_smoke
 ```
 
+The default integration suite checks service availability and session lifecycle.
+The Alpine echo test is ignored by default because it pulls from Docker Hub; run
+it explicitly with `-- --ignored` when registry access is available.
+
 ## Status
 
 Implemented in `0.1.0`:

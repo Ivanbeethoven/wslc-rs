@@ -299,6 +299,7 @@ impl Process {
 impl Drop for ProcessInner {
     fn drop(&mut self) {
         if let Ok(sdk) = raw::sdk() {
+            let _com = crate::com::try_initialize_mta().ok().flatten();
             unsafe {
                 let _ = (sdk.WslcReleaseProcess)(self.raw);
             }

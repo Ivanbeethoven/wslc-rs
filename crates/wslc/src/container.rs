@@ -589,6 +589,7 @@ impl Container {
 impl Drop for ContainerInner {
     fn drop(&mut self) {
         if let Ok(sdk) = raw::sdk() {
+            let _com = crate::com::try_initialize_mta().ok().flatten();
             unsafe {
                 let _ = (sdk.WslcReleaseContainer)(self.raw.as_ptr());
             }

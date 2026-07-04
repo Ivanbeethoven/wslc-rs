@@ -23,6 +23,7 @@ impl std::fmt::Debug for Session {
 pub(crate) struct SessionInner {
     pub raw: NonNull<std::ffi::c_void>,
     terminate_on_drop: bool,
+    _com: Option<com::ComGuard>,
 }
 
 impl Session {
@@ -262,7 +263,7 @@ impl SessionBuilder {
     /// Starts the WSLC session.
     pub fn start(self) -> Result<Session> {
         self.validate()?;
-        let _com = com::try_initialize_mta()?;
+        let com = com::try_initialize_mta()?;
         let sdk = raw::sdk()?;
         let name = strings::wide_str(&self.name);
         let storage_path = strings::wide_path(&self.storage_path);
@@ -327,6 +328,7 @@ impl SessionBuilder {
             inner: Rc::new(SessionInner {
                 raw,
                 terminate_on_drop: self.terminate_on_drop,
+                _com: com,
             }),
         })
     }

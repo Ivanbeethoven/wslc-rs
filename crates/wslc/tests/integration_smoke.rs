@@ -10,6 +10,23 @@ fn service_is_available_when_integration_feature_is_enabled() {
 }
 
 #[test]
+fn session_lifecycle_smoke_test() {
+    Service::ensure_available().expect("WSLC service should be available for integration tests");
+
+    let session = Session::builder(
+        "wslc-rs-session-lifecycle",
+        PathBuf::from(r"C:\WslcData\wslc-rs-session-lifecycle"),
+    )
+    .cpu_count(2)
+    .memory_mb(2048)
+    .start()
+    .expect("session should start");
+
+    session.terminate().expect("session should terminate");
+}
+
+#[test]
+#[ignore = "requires Docker Hub access and pulls docker.io/library/alpine:latest"]
 fn alpine_echo_smoke_test() {
     Service::ensure_available().expect("WSLC service should be available for integration tests");
 
