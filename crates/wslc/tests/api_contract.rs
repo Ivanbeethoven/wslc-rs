@@ -429,6 +429,7 @@ fn repository_links_point_to_ivanbeethoven_repo() {
     let files = [
         "Cargo.toml",
         "README.md",
+        "docs/sdk-installation.md",
         "docs/build-and-linking.md",
         "wslc-rust-api-design.md",
         "crates/wslc/README.md",
@@ -455,6 +456,62 @@ fn repository_links_point_to_ivanbeethoven_repo() {
     assert!(
         violations.is_empty(),
         "repository link violations:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn sdk_installation_guide_is_linked_from_public_readmes() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+
+    assert!(
+        workspace.join("docs/sdk-installation.md").is_file(),
+        "missing SDK installation guide"
+    );
+
+    for file in ["README.md", "crates/wslc/README.md"] {
+        let source =
+            std::fs::read_to_string(workspace.join(file)).expect("read public README file");
+        assert!(
+            source.contains("sdk-installation.md"),
+            "{file} should link to the SDK installation guide"
+        );
+    }
+}
+
+#[test]
+fn public_docs_do_not_contain_private_registry_mirrors() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+    let files = [
+        "README.md",
+        "docs/sdk-installation.md",
+        "crates/wslc/README.md",
+        "crates/wslc/examples/hello.rs",
+        "crates/wslc/examples/container_inspect.rs",
+    ];
+    let forbidden = ["xuanyuan.run", "w23geq", "um1ao"];
+
+    let mut violations = Vec::new();
+    for file in files {
+        let source = std::fs::read_to_string(workspace.join(file)).expect("read public doc file");
+        for value in forbidden {
+            if source.contains(value) {
+                violations.push(format!("{file} contains {value}"));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "private registry mirror leaked into public docs:\n{}",
         violations.join("\n")
     );
 }

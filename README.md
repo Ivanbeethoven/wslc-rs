@@ -10,15 +10,6 @@ a traditional WSL distro-management crate.
 > WSLC is a preview Microsoft API. Function signatures and behavior can change
 > before the platform reaches GA. This crate starts at `0.1.x` for that reason.
 
-## Crates
-
-- `wslc-sys`: raw ABI-compatible Rust types plus the runtime unsafe boundary
-  for loading `wslcsdk.dll`, calling SDK exports, handling callbacks, and
-  releasing SDK-allocated memory. It does not redistribute Microsoft binaries.
-- `wslc`: safe blocking wrapper with builders, input validation, HRESULT error
-  mapping, RAII handle release, and MVP session/container APIs. The safe crate
-  keeps SDK `unsafe` code out of its source tree.
-
 ## Quick Start
 
 ```rust
@@ -51,14 +42,37 @@ fn main() -> wslc::Result<()> {
 }
 ```
 
+## Links
+
+- [WSL developer documentation](https://wsl.dev/)
+- [WSL development loop](https://wsl.dev/dev-loop/)
+- [WSL container API reference](https://wsl.dev/api-reference/)
+- [C++ API end-to-end example](https://wsl.dev/api-reference/cpp/end-to-end-example/)
+- [WSL container overview](https://learn.microsoft.com/en-us/windows/wsl/wsl-container)
+- [WSL container CLI tutorial](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-containers)
+- [Microsoft.WSL.Containers NuGet package](https://www.nuget.org/packages/Microsoft.WSL.Containers)
+- [SDK installation guide](docs/sdk-installation.md)
+- [Rust examples](crates/wslc/examples)
+
+## Crates
+
+- `wslc-sys`: raw ABI-compatible Rust types plus the runtime unsafe boundary
+  for loading `wslcsdk.dll`, calling SDK exports, handling callbacks, and
+  releasing SDK-allocated memory. It does not redistribute Microsoft binaries.
+- `wslc`: safe blocking wrapper with builders, input validation, HRESULT error
+  mapping, RAII handle release, and MVP session/container APIs. The safe crate
+  keeps SDK `unsafe` code out of its source tree.
+
 ## SDK Loading
+
+See [SDK installation guide](docs/sdk-installation.md) for the full setup.
 
 The safe crate loads `wslcsdk.dll` at runtime. This means normal builds,
 documentation, and unit tests can run on machines that do not have the preview
 SDK installed. Calls into WSLC return `Error::SdkNotFound` when the DLL or a
 required export is unavailable.
 
-At runtime, make sure the native SDK directory is on `PATH`, for example:
+At runtime, make sure the native SDK directory is on `PATH`:
 
 ```powershell
 $env:WSLC_SDK_DIR="C:\Users\<you>\.nuget\packages\microsoft.wsl.containers\<version>"
