@@ -159,7 +159,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/<your-org>/wslc-rs"
+repository = "https://github.com/Ivanbeethoven/wslc-rs"
 ```
 
 ## 8. 版本锁定

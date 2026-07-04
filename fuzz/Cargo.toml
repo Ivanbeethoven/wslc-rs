@@ -1,0 +1,20 @@
+[package]
+name = "wslc-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+libfuzzer-sys = "0.4"
+wslc = { path = "../crates/wslc" }
+
+[[bin]]
+name = "validate_options"
+path = "fuzz_targets/validate_options.rs"
+test = false
+doc = false
+bench = false

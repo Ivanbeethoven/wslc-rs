@@ -85,6 +85,20 @@ The default integration suite checks service availability and session lifecycle.
 The Alpine echo test is ignored by default because it pulls from Docker Hub; run
 it explicitly with `-- --ignored` when registry access is available.
 
+Fuzz targets live under `fuzz/` and focus on pure Rust validation paths that do
+not call the WSLC runtime:
+
+```powershell
+cargo install cargo-fuzz --locked
+cargo fuzz run validate_options
+```
+
+On Windows MSVC, libFuzzer also needs the LLVM/Clang ASan runtime libraries on
+the linker search path. If `cargo fuzz run` reports a missing
+`clang_rt.asan_dynamic_runtime_thunk-x86_64.lib`, install the LLVM/Clang tools
+for your Visual Studio toolchain or add the directory containing that library to
+`LIB`.
+
 ## Status
 
 Implemented in `0.1.0`:

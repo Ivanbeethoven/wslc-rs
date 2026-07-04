@@ -2,8 +2,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use wslc::{
-    DeleteContainerOptions, Error, ImagePullOptions, ProcessOptions, Service, Session, Signal,
-    WslcErrorKind,
+    ComponentFlags, ContainerOptions, ContainerState, DeleteContainerOptions, Error,
+    ImageProgressStatus, ImagePullOptions, NetworkingMode, ProcessOptions, ProcessState, Service,
+    Session, Signal, Version, VhdOptions, VhdType, WslcErrorKind,
 };
 
 #[test]
@@ -42,8 +43,103 @@ fn image_pull_options_reject_empty_uri_before_loading_sdk() {
 }
 
 #[test]
+fn image_pull_options_reject_interior_nul_before_loading_sdk() {
+    let err = ImagePullOptions::new("docker.io/library/alpine\0latest")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "image uri"));
+
+    let err = ImagePullOptions::new("docker.io/library/alpine:latest")
+        .registry_auth("token\0tail")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "registry_auth"));
+}
+
+#[test]
+fn container_options_reject_empty_and_nul_image_names() {
+    let err = ContainerOptions::new("   ").validate().unwrap_err();
+
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("container image")));
+
+    let err = ContainerOptions::new("alpine\0latest")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "container image"));
+}
+
+#[test]
 fn delete_container_options_default_is_not_forceful() {
     assert!(!DeleteContainerOptions::default().force);
+}
+
+#[test]
+fn builder_style_options_preserve_values() {
+    let pull = ImagePullOptions::new("alpine:latest").registry_auth("secret");
+    assert_eq!(pull.uri, "alpine:latest");
+    assert_eq!(pull.registry_auth.as_deref(), Some("secret"));
+
+    let process = ProcessOptions::new(["/bin/echo"])
+        .working_dir("/tmp")
+        .env("A", "B")
+        .capture_stdout()
+        .capture_stderr()
+        .inherit_output()
+        .streaming();
+    assert_eq!(process.cmdline, vec!["/bin/echo"]);
+    assert_eq!(process.working_dir.as_deref(), Some("/tmp"));
+    assert_eq!(process.env, vec![("A".to_owned(), "B".to_owned())]);
+
+    let vhd = VhdOptions::new("cache", 1024)
+        .vhd_type(VhdType::Fixed)
+        .owner(1000, 1000);
+    assert_eq!(vhd.name, "cache");
+    assert_eq!(vhd.size_bytes, 1024);
+    assert_eq!(vhd.vhd_type, VhdType::Fixed);
+    assert_eq!(vhd.owner, Some((1000, 1000)));
+
+    let delete = DeleteContainerOptions::default().force(true);
+    assert!(delete.force);
+}
+
+#[test]
+fn process_options_reject_nul_and_invalid_env_before_loading_sdk() {
+    let err = ProcessOptions::new(["/bin/echo", "hello\0world"])
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "process arg"));
+
+    let err = ProcessOptions::new(["/bin/pwd"])
+        .working_dir("/tmp\0x")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "working_dir"));
+
+    let err = ProcessOptions::new(["/bin/env"])
+        .env("", "value")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("env variable key")));
+
+    let err = ProcessOptions::new(["/bin/env"])
+        .env("A=B", "value")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("env variable key")));
+
+    let err = ProcessOptions::new(["/bin/env"])
+        .env("A", "va\0lue")
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Nul(field) if field == "env"));
 }
 
 #[test]
@@ -66,6 +162,165 @@ fn hresult_errors_expose_original_code_and_wslc_kind() {
 }
 
 #[test]
+fn known_wslc_hresult_codes_map_to_error_kinds() {
+    let cases = [
+        (0x8004_0601_u32 as i32, WslcErrorKind::ImageNotFound),
+        (
+            0x8004_0602_u32 as i32,
+            WslcErrorKind::ContainerPrefixAmbiguous,
+        ),
+        (0x8004_0603_u32 as i32, WslcErrorKind::ContainerNotFound),
+        (0x8004_0604_u32 as i32, WslcErrorKind::VolumeNotFound),
+        (0x8004_0605_u32 as i32, WslcErrorKind::ContainerNotRunning),
+        (0x8004_0606_u32 as i32, WslcErrorKind::ContainerIsRunning),
+        (0x8004_0607_u32 as i32, WslcErrorKind::SessionReserved),
+        (0x8004_0608_u32 as i32, WslcErrorKind::InvalidSessionName),
+        (0x8004_0609_u32 as i32, WslcErrorKind::NetworkNotFound),
+        (
+            0x8004_060A_u32 as i32,
+            WslcErrorKind::WindowsUpdateSearchFailed,
+        ),
+        (0x8004_060B_u32 as i32, WslcErrorKind::SdkUpdateNeeded),
+        (0x8004_060C_u32 as i32, WslcErrorKind::ContainerDisabled),
+        (
+            0x8004_060D_u32 as i32,
+            WslcErrorKind::RegistryBlockedByPolicy,
+        ),
+        (0x8004_060E_u32 as i32, WslcErrorKind::VolumeNotAvailable),
+        (0x8004_060F_u32 as i32, WslcErrorKind::SessionNotFound),
+    ];
+
+    for (code, expected) in cases {
+        assert_eq!(
+            Error::from_hresult(code, "case").wslc_kind(),
+            Some(expected)
+        );
+    }
+
+    assert_eq!(
+        Error::from_hresult(0x8004_9999_u32 as i32, "unknown").wslc_kind(),
+        Some(WslcErrorKind::Unknown(0x8004_9999_u32 as i32))
+    );
+    assert_eq!(
+        Error::from_hresult(0x8007_0005_u32 as i32, "other").wslc_kind(),
+        None
+    );
+}
+
+#[test]
+fn raw_sdk_enums_map_to_safe_unknown_variants() {
+    assert_eq!(
+        ContainerState::from(wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_CREATED),
+        ContainerState::Created
+    );
+    assert_eq!(
+        ContainerState::from(wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_RUNNING),
+        ContainerState::Running
+    );
+    assert_eq!(
+        ContainerState::from(wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_EXITED),
+        ContainerState::Exited
+    );
+    assert_eq!(
+        ContainerState::from(wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_DELETED),
+        ContainerState::Deleted
+    );
+    assert_eq!(
+        ContainerState::from(wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_INVALID),
+        ContainerState::Invalid
+    );
+
+    assert_eq!(
+        ProcessState::from(wslc_sys::WslcProcessState::WSLC_PROCESS_STATE_RUNNING),
+        ProcessState::Running
+    );
+    assert_eq!(
+        ProcessState::from(wslc_sys::WslcProcessState::WSLC_PROCESS_STATE_EXITED),
+        ProcessState::Exited
+    );
+    assert_eq!(
+        ProcessState::from(wslc_sys::WslcProcessState::WSLC_PROCESS_STATE_SIGNALLED),
+        ProcessState::Signalled
+    );
+    assert_eq!(
+        ProcessState::from(wslc_sys::WslcProcessState::WSLC_PROCESS_STATE_UNKNOWN),
+        ProcessState::Unknown
+    );
+
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_PULLING,
+        ),
+        ImageProgressStatus::Pulling
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_WAITING,
+        ),
+        ImageProgressStatus::Waiting
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_DOWNLOADING,
+        ),
+        ImageProgressStatus::Downloading
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_VERIFYING,
+        ),
+        ImageProgressStatus::Verifying
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_EXTRACTING,
+        ),
+        ImageProgressStatus::Extracting
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_COMPLETE,
+        ),
+        ImageProgressStatus::Complete
+    );
+    assert_eq!(
+        ImageProgressStatus::from(
+            wslc_sys::WslcImageProgressStatus::WSLC_IMAGE_PROGRESS_STATUS_UNKNOWN,
+        ),
+        ImageProgressStatus::Unknown
+    );
+}
+
+#[test]
+fn component_flags_and_version_are_plain_value_types() {
+    let flags = ComponentFlags::from_bits_retain(
+        ComponentFlags::VIRTUAL_MACHINE_PLATFORM.bits()
+            | ComponentFlags::WSL_PACKAGE.bits()
+            | 0x8000_0000,
+    );
+
+    assert!(ComponentFlags::NONE.is_empty());
+    assert!(!flags.is_empty());
+    assert!(flags.contains(ComponentFlags::VIRTUAL_MACHINE_PLATFORM));
+    assert!(flags.contains(ComponentFlags::WSL_PACKAGE));
+    assert!(!flags.contains(ComponentFlags::SDK_NEEDS_UPDATE));
+    assert_eq!(
+        format!("{:?}", ComponentFlags::NONE),
+        "ComponentFlags(NONE)"
+    );
+    assert!(format!("{flags:?}").contains("VIRTUAL_MACHINE_PLATFORM"));
+
+    let version = Version::from(wslc_sys::WslcVersion {
+        major: 2,
+        minor: 9,
+        revision: 3,
+    });
+    assert_eq!(version.major, 2);
+    assert_eq!(version.minor, 9);
+    assert_eq!(version.revision, 3);
+}
+
+#[test]
 fn service_reports_missing_sdk_as_sdk_not_found_or_components() {
     let result = Service::version();
 
@@ -79,8 +334,12 @@ fn service_reports_missing_sdk_as_sdk_not_found_or_components() {
 
 #[test]
 fn signal_values_match_linux_signal_numbers() {
+    let _networking = [NetworkingMode::None, NetworkingMode::Bridged];
     assert_eq!(Signal::Sigterm.as_raw(), 15);
     assert_eq!(Signal::Sigkill.as_raw(), 9);
+    assert_eq!(Signal::Sighup.as_raw(), 1);
+    assert_eq!(Signal::Sigint.as_raw(), 2);
+    assert_eq!(Signal::Sigquit.as_raw(), 3);
 }
 
 #[test]
@@ -111,6 +370,51 @@ fn safe_crate_sources_do_not_contain_unsafe_code() {
     assert!(
         violations.is_empty(),
         "the safe wslc crate must not contain unsafe code:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn repository_links_point_to_ivanbeethoven_repo() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+    let expected = "https://github.com/Ivanbeethoven/wslc-rs";
+    let forbidden = [
+        "github.com/hxy9243/wslc-rs",
+        "github.com/<your-org>/wslc-rs",
+    ];
+    let files = [
+        "Cargo.toml",
+        "README.md",
+        "docs/build-and-linking.md",
+        "wslc-rust-api-design.md",
+        "crates/wslc/README.md",
+        "crates/wslc-sys/README.md",
+    ];
+
+    let mut violations = Vec::new();
+    for file in files {
+        let path = workspace.join(file);
+        let source = std::fs::read_to_string(&path).expect("read repository metadata file");
+        for value in forbidden {
+            if source.contains(value) {
+                violations.push(format!("{file} contains {value}"));
+            }
+        }
+    }
+
+    let manifest =
+        std::fs::read_to_string(workspace.join("Cargo.toml")).expect("read workspace manifest");
+    assert!(
+        manifest.contains(expected),
+        "workspace manifest must contain {expected}"
+    );
+    assert!(
+        violations.is_empty(),
+        "repository link violations:\n{}",
         violations.join("\n")
     );
 }

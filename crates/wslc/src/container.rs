@@ -28,6 +28,9 @@ impl ContainerOptions {
                 "container image cannot be empty".to_owned(),
             ));
         }
+        if self.image.contains('\0') {
+            return Err(Error::Nul("container image".to_owned()));
+        }
         Ok(())
     }
 }

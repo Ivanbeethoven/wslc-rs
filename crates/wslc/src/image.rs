@@ -29,6 +29,16 @@ impl ImagePullOptions {
         if self.uri.trim().is_empty() {
             return Err(Error::InvalidInput("image uri cannot be empty".to_owned()));
         }
+        if self.uri.contains('\0') {
+            return Err(Error::Nul("image uri".to_owned()));
+        }
+        if self
+            .registry_auth
+            .as_ref()
+            .is_some_and(|value| value.contains('\0'))
+        {
+            return Err(Error::Nul("registry_auth".to_owned()));
+        }
         Ok(())
     }
 }

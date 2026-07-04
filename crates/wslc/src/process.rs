@@ -113,11 +113,27 @@ impl ProcessOptions {
                 "process command arguments cannot be empty".to_owned(),
             ));
         }
+        if self.cmdline.iter().any(|arg| arg.contains('\0')) {
+            return Err(Error::Nul("process arg".to_owned()));
+        }
         if let Some(dir) = &self.working_dir {
             if dir.is_empty() {
                 return Err(Error::InvalidInput(
                     "working directory cannot be empty".to_owned(),
                 ));
+            }
+            if dir.contains('\0') {
+                return Err(Error::Nul("working_dir".to_owned()));
+            }
+        }
+        for (key, value) in &self.env {
+            if key.is_empty() || key.contains('=') {
+                return Err(Error::InvalidInput(
+                    "env variable key cannot be empty or contain '='".to_owned(),
+                ));
+            }
+            if key.contains('\0') || value.contains('\0') {
+                return Err(Error::Nul("env".to_owned()));
             }
         }
         Ok(())
