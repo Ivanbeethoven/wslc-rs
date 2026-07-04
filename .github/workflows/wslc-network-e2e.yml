@@ -1,6 +1,20 @@
 name: WSLC network E2E
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/wslc-network-e2e.yml"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/wslc-network-e2e.yml"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
   workflow_dispatch:
     inputs:
       runner_labels:
@@ -12,10 +26,14 @@ on:
         required: false
         default: "2.9.3"
 
+env:
+  WSLC_SDK_PACKAGE_VERSION: ${{ inputs.package_version || '2.9.3' }}
+  WSLC_RUNNER_LABELS: ${{ inputs.runner_labels || '["windows-latest"]' }}
+
 jobs:
   alpine-echo:
     name: Pull Alpine and run echo
-    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    runs-on: ${{ fromJSON(env.WSLC_RUNNER_LABELS) }}
     timeout-minutes: 45
 
     steps:
@@ -32,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ inputs.package_version }}"
+          $version = "$env:WSLC_SDK_PACKAGE_VERSION"
           $sdkRoot = Join-Path $env:RUNNER_TEMP "wslc-sdk"
           New-Item -ItemType Directory -Force -Path $sdkRoot | Out-Null
           nuget install Microsoft.WSL.Containers -Version $version -OutputDirectory $sdkRoot -DirectDownload -NonInteractive
