@@ -57,22 +57,10 @@ impl Session {
     /// Lists images in the session.
     pub fn list_images(&self) -> Result<Vec<ImageInfo>> {
         let sdk = raw::sdk()?;
-        let mut raw_images = std::ptr::null_mut();
-        let mut count = 0;
-        let hr = unsafe { (sdk.WslcListSessionImages)(self.raw(), &mut raw_images, &mut count) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
-        if raw_images.is_null() || count == 0 {
-            return Ok(Vec::new());
-        }
-
-        let slice = unsafe { std::slice::from_raw_parts(raw_images, count as usize) };
-        let images = slice
-            .iter()
-            .copied()
+        raw::map_result(sdk.list_session_images(self.raw()))?
+            .into_iter()
             .map(ImageInfo::try_from)
-            .collect::<Result<Vec<_>>>()?;
-        raw::free_cotaskmem(raw_images.cast());
-        Ok(images)
+            .collect::<Result<Vec<_>>>()
     }
 
     /// Deletes an image by name or ID.
@@ -85,11 +73,7 @@ impl Session {
         }
         let sdk = raw::sdk()?;
         let name_or_id = strings::cstring(name_or_id, "name_or_id")?;
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcDeleteSessionImage)(self.raw(), name_or_id.as_ptr(), &mut error_message)
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.delete_session_image(self.raw(), name_or_id.as_ptr()))
     }
 
     /// Tags an image.
@@ -117,9 +101,7 @@ impl Session {
             repo: repo.as_ptr(),
             tag: tag.as_ptr(),
         };
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe { (sdk.WslcTagSessionImage)(self.raw(), &options, &mut error_message) };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.tag_session_image(self.raw(), &options))
     }
 
     /// Creates a container builder.
@@ -144,11 +126,7 @@ impl Session {
             uid,
             gid,
         };
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcCreateSessionVhdVolume)(self.raw(), &raw_options, &mut error_message)
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.create_session_vhd_volume(self.raw(), &raw_options))
     }
 
     /// Deletes a VHD-backed volume.
@@ -161,18 +139,13 @@ impl Session {
         }
         let sdk = raw::sdk()?;
         let name = strings::cstring(name, "volume name")?;
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcDeleteSessionVhdVolume)(self.raw(), name.as_ptr(), &mut error_message)
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.delete_session_vhd_volume(self.raw(), name.as_ptr()))
     }
 
     /// Terminates the session.
     pub fn terminate(&self) -> Result<()> {
         let sdk = raw::sdk()?;
-        let hr = unsafe { (sdk.WslcTerminateSession)(self.raw()) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }
+        raw::map_result(sdk.terminate_session(self.raw()))
     }
 }
 
@@ -268,31 +241,26 @@ impl SessionBuilder {
         let name = strings::wide_str(&self.name);
         let storage_path = strings::wide_path(&self.storage_path);
         let mut settings = wslc_sys::WslcSessionSettings::default();
-        let hr = unsafe {
-            (sdk.WslcInitSessionSettings)(name.as_ptr(), storage_path.as_ptr(), &mut settings)
-        };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(sdk.init_session_settings(
+            name.as_ptr(),
+            storage_path.as_ptr(),
+            &mut settings,
+        ))?;
 
         if let Some(cpu_count) = self.cpu_count {
-            let hr = unsafe { (sdk.WslcSetSessionSettingsCpuCount)(&mut settings, cpu_count) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_session_cpu_count(&mut settings, cpu_count))?;
         }
         if let Some(memory_mb) = self.memory_mb {
-            let hr = unsafe { (sdk.WslcSetSessionSettingsMemory)(&mut settings, memory_mb) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_session_memory(&mut settings, memory_mb))?;
         }
         if let Some(timeout_ms) = self.timeout_ms {
-            let hr = unsafe { (sdk.WslcSetSessionSettingsTimeout)(&mut settings, timeout_ms) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_session_timeout(&mut settings, timeout_ms))?;
         }
         if self.enable_gpu {
-            let hr = unsafe {
-                (sdk.WslcSetSessionSettingsFeatureFlags)(
-                    &mut settings,
-                    wslc_sys::WSLC_SESSION_FEATURE_FLAG_ENABLE_GPU,
-                )
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_session_feature_flags(
+                &mut settings,
+                wslc_sys::WSLC_SESSION_FEATURE_FLAG_ENABLE_GPU,
+            ))?;
         }
 
         let vhd_name;
@@ -312,15 +280,10 @@ impl SessionBuilder {
                 uid,
                 gid,
             };
-            let hr = unsafe { (sdk.WslcSetSessionSettingsVhd)(&mut settings, &vhd_raw) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_session_vhd(&mut settings, &vhd_raw))?;
         }
 
-        let mut raw_session = std::ptr::null_mut();
-        let mut error_message = std::ptr::null_mut();
-        let hr =
-            unsafe { (sdk.WslcCreateSession)(&mut settings, &mut raw_session, &mut error_message) };
-        unsafe { raw::check_hr(hr, error_message) }?;
+        let raw_session = raw::map_result(sdk.create_session(&mut settings))?;
         let raw = NonNull::new(raw_session).ok_or_else(|| {
             Error::from_hresult(wslc_sys::S_OK, "WslcCreateSession returned a null session")
         })?;
@@ -337,12 +300,10 @@ impl SessionBuilder {
 impl Drop for SessionInner {
     fn drop(&mut self) {
         if let Ok(sdk) = raw::sdk() {
-            unsafe {
-                if self.terminate_on_drop {
-                    let _ = (sdk.WslcTerminateSession)(self.raw.as_ptr());
-                }
-                let _ = (sdk.WslcReleaseSession)(self.raw.as_ptr());
+            if self.terminate_on_drop {
+                let _ = sdk.terminate_session(self.raw.as_ptr());
             }
+            let _ = sdk.release_session(self.raw.as_ptr());
         }
     }
 }

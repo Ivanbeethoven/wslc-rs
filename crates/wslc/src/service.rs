@@ -95,9 +95,7 @@ impl Service {
     pub fn missing_components() -> Result<ComponentFlags> {
         let _com = com::try_initialize_mta()?;
         let sdk = raw::sdk()?;
-        let mut flags = 0;
-        let hr = unsafe { (sdk.WslcGetMissingComponents)(&mut flags) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let flags = raw::map_result(sdk.missing_components())?;
         Ok(ComponentFlags::from_bits_retain(flags))
     }
 
@@ -105,9 +103,7 @@ impl Service {
     pub fn version() -> Result<Version> {
         let _com = com::try_initialize_mta()?;
         let sdk = raw::sdk()?;
-        let mut version = wslc_sys::WslcVersion::default();
-        let hr = unsafe { (sdk.WslcGetVersion)(&mut version) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let version = raw::map_result(sdk.version())?;
         Ok(version.into())
     }
 
@@ -129,31 +125,14 @@ impl Service {
         let _com = com::try_initialize_mta()?;
         let sdk = raw::sdk()?;
         let mut callback = Box::new(progress);
-        let context = (&mut *callback) as *mut F as wslc_sys::PVOID;
-        let hr =
-            unsafe { (sdk.WslcInstallWithDependencies)(Some(install_trampoline::<F>), context) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }
+        raw::map_result(sdk.install_with_dependencies(
+            &mut |component, progress_steps, total_steps| {
+                callback(InstallProgress {
+                    component: ComponentFlags::from_bits_retain(component),
+                    progress_steps,
+                    total_steps,
+                });
+            },
+        ))
     }
-}
-
-unsafe extern "system" fn install_trampoline<F>(
-    component: wslc_sys::WslcComponentFlags,
-    progress_steps: u32,
-    total_steps: u32,
-    context: wslc_sys::PVOID,
-) where
-    F: FnMut(InstallProgress),
-{
-    if context.is_null() {
-        return;
-    }
-
-    let callback = unsafe { &mut *(context as *mut F) };
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        callback(InstallProgress {
-            component: ComponentFlags::from_bits_retain(component),
-            progress_steps,
-            total_steps,
-        });
-    }));
 }

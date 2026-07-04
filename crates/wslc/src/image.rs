@@ -63,54 +63,28 @@ impl<'a> ImagePullOperation<'a> {
             std::ptr::null()
         };
 
-        let mut progress = self
-            .progress
-            .take()
-            .map(|callback| ProgressCallback { callback });
-        let context = progress
-            .as_mut()
-            .map(|callback| callback as *mut ProgressCallback as wslc_sys::PVOID)
-            .unwrap_or(std::ptr::null_mut());
-
-        let options = wslc_sys::WslcPullImageOptions {
-            uri: uri.as_ptr(),
-            progressCallback: if context.is_null() {
-                None
-            } else {
-                Some(progress_trampoline)
-            },
-            progressCallbackContext: context,
-            registryAuth: registry_auth_ptr,
-        };
-        let mut error_message = std::ptr::null_mut();
-        let hr =
-            unsafe { (sdk.WslcPullSessionImage)(self.session.raw(), &options, &mut error_message) };
-        unsafe { raw::check_hr(hr, error_message) }
+        if let Some(mut callback) = self.progress.take() {
+            raw::map_result(sdk.pull_session_image_with_progress(
+                self.session.raw(),
+                uri.as_ptr(),
+                registry_auth_ptr,
+                &mut |progress| {
+                    callback(ImageProgress {
+                        id: progress.id,
+                        status: progress.status.into(),
+                        current_bytes: progress.current_bytes,
+                        total_bytes: progress.total_bytes,
+                    });
+                },
+            ))
+        } else {
+            raw::map_result(sdk.pull_session_image(
+                self.session.raw(),
+                uri.as_ptr(),
+                registry_auth_ptr,
+            ))
+        }
     }
-}
-
-unsafe extern "system" fn progress_trampoline(
-    progress: *const wslc_sys::WslcImageProgressMessage,
-    context: wslc_sys::PVOID,
-) -> wslc_sys::HRESULT {
-    if progress.is_null() || context.is_null() {
-        return wslc_sys::S_OK;
-    }
-
-    let progress = unsafe { &*progress };
-    let event = ImageProgress {
-        id: unsafe { strings::c_ptr_to_string(progress.id) }.unwrap_or_default(),
-        status: progress.status.into(),
-        current_bytes: progress.detail.currentBytes,
-        total_bytes: progress.detail.totalBytes,
-    };
-    let callback = unsafe { &mut *(context as *mut ProgressCallback) };
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (callback.callback)(event)));
-    wslc_sys::S_OK
-}
-
-struct ProgressCallback {
-    callback: Box<dyn FnMut(ImageProgress) + Send>,
 }
 
 /// Image progress event.
@@ -184,7 +158,7 @@ impl TryFrom<wslc_sys::WslcImageInfo> for ImageInfo {
     type Error = crate::Error;
 
     fn try_from(value: wslc_sys::WslcImageInfo) -> Result<Self> {
-        let name = unsafe { strings::c_ptr_to_string(value.name.as_ptr()) }?;
+        let name = raw::image_name_to_string(&value.name)?;
         Ok(Self {
             name,
             sha256: value.sha256,

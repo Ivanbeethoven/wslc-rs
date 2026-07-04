@@ -1,7 +1,5 @@
-use std::rc::Rc;
-use std::sync::{Arc, Condvar, Mutex};
-
 use crate::{raw, strings, Error, Result};
+use std::rc::Rc;
 
 /// Output capture mode for a process.
 pub enum OutputMode {
@@ -132,23 +130,18 @@ impl ProcessOptions {
     ) -> Result<wslc_sys::WslcProcessSettings> {
         self.validate()?;
         let mut settings = wslc_sys::WslcProcessSettings::default();
-        let hr = unsafe { (sdk.WslcInitProcessSettings)(&mut settings) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(sdk.init_process_settings(&mut settings))?;
 
         let argv = strings::cstrings(self.cmdline.iter().map(String::as_str), "process arg")?;
         let argv_ptrs: Vec<_> = argv.iter().map(|arg| arg.as_ptr()).collect();
-        let hr = unsafe {
-            (sdk.WslcSetProcessSettingsCmdLine)(&mut settings, argv_ptrs.as_ptr(), argv_ptrs.len())
-        };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(sdk.set_process_cmdline(&mut settings, &argv_ptrs))?;
 
         let working_dir;
         if let Some(dir) = &self.working_dir {
             working_dir = strings::cstring(dir, "working_dir")?;
-            let hr = unsafe {
-                (sdk.WslcSetProcessSettingsWorkingDirectory)(&mut settings, working_dir.as_ptr())
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(
+                sdk.set_process_working_directory(&mut settings, working_dir.as_ptr()),
+            )?;
         }
 
         let env_values: Vec<String> = self
@@ -159,26 +152,11 @@ impl ProcessOptions {
         let env_c = strings::cstrings(env_values.iter().map(String::as_str), "env")?;
         let env_ptrs: Vec<_> = env_c.iter().map(|value| value.as_ptr()).collect();
         if !env_ptrs.is_empty() {
-            let hr = unsafe {
-                (sdk.WslcSetProcessSettingsEnvVariables)(
-                    &mut settings,
-                    env_ptrs.as_ptr(),
-                    env_ptrs.len(),
-                )
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_process_env_variables(&mut settings, &env_ptrs))?;
         }
 
         if let Some(capture) = capture {
-            let callbacks = wslc_sys::WslcProcessCallbacks {
-                onStdOut: Some(stdio_trampoline),
-                onStdErr: Some(stdio_trampoline),
-                onExit: Some(exit_trampoline),
-            };
-            let hr = unsafe {
-                (sdk.WslcSetProcessSettingsCallbacks)(&mut settings, &callbacks, capture.context())
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_process_capture_callbacks(&mut settings, capture))?;
         }
 
         Ok(settings)
@@ -239,43 +217,33 @@ impl Process {
     /// Returns the process ID.
     pub fn pid(&self) -> Result<u32> {
         let sdk = raw::sdk()?;
-        let mut pid = 0;
-        let hr = unsafe { (sdk.WslcGetProcessPid)(self.inner.raw, &mut pid) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
-        Ok(pid)
+        raw::map_result(sdk.process_pid(self.inner.raw))
     }
 
     /// Returns the process state.
     pub fn state(&self) -> Result<ProcessState> {
         let sdk = raw::sdk()?;
-        let mut state = wslc_sys::WslcProcessState::WSLC_PROCESS_STATE_UNKNOWN;
-        let hr = unsafe { (sdk.WslcGetProcessState)(self.inner.raw, &mut state) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let state = raw::map_result(sdk.process_state(self.inner.raw))?;
         Ok(state.into())
     }
 
     /// Sends a signal to the process.
     pub fn signal(&self, signal: crate::Signal) -> Result<()> {
         let sdk = raw::sdk()?;
-        let hr = unsafe { (sdk.WslcSignalProcess)(self.inner.raw, signal.as_raw_signal()) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }
+        raw::map_result(sdk.signal_process(self.inner.raw, signal.as_raw_signal()))
     }
 
     /// Returns the exit code.
     pub fn exit_code(&self) -> Result<Option<i32>> {
         let sdk = raw::sdk()?;
-        let mut exit_code = 0;
-        let hr = unsafe { (sdk.WslcGetProcessExitCode)(self.inner.raw, &mut exit_code) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let exit_code = raw::map_result(sdk.process_exit_code(self.inner.raw))?;
         Ok(Some(exit_code))
     }
 
     /// Waits for the process to finish.
     pub fn wait(&self) -> Result<i32> {
         let sdk = raw::sdk()?;
-        let mut event = std::ptr::null_mut();
-        let hr = unsafe { (sdk.WslcGetProcessExitEvent)(self.inner.raw, &mut event) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let event = raw::map_result(sdk.process_exit_event(self.inner.raw))?;
         const INFINITE: u32 = 0xffff_ffff;
         const WAIT_OBJECT_0: u32 = 0;
         let wait = raw::wait_for_single_object(event, INFINITE);
@@ -300,81 +268,9 @@ impl Drop for ProcessInner {
     fn drop(&mut self) {
         if let Ok(sdk) = raw::sdk() {
             let _com = crate::com::try_initialize_mta().ok().flatten();
-            unsafe {
-                let _ = (sdk.WslcReleaseProcess)(self.raw);
-            }
+            let _ = sdk.release_process(self.raw);
         }
     }
 }
 
-#[derive(Default)]
-struct CaptureState {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    status: Option<i32>,
-}
-
-#[derive(Clone)]
-pub(crate) struct CaptureRegistration {
-    state: Arc<(Mutex<CaptureState>, Condvar)>,
-}
-
-impl CaptureRegistration {
-    pub(crate) fn new() -> Self {
-        Self {
-            state: Arc::new((Mutex::new(CaptureState::default()), Condvar::new())),
-        }
-    }
-
-    fn context(&self) -> wslc_sys::PVOID {
-        Arc::as_ptr(&self.state).cast_mut().cast()
-    }
-
-    pub(crate) fn wait_output(&self) -> Output {
-        let (lock, cvar) = &*self.state;
-        let mut state = lock.lock().expect("capture lock poisoned");
-        while state.status.is_none() {
-            state = cvar.wait(state).expect("capture lock poisoned");
-        }
-        Output {
-            status: state.status.unwrap_or_default(),
-            stdout: state.stdout.clone(),
-            stderr: state.stderr.clone(),
-        }
-    }
-}
-
-unsafe extern "system" fn stdio_trampoline(
-    io_handle: wslc_sys::WslcProcessIOHandle,
-    data: *const u8,
-    data_bytes: u32,
-    context: wslc_sys::PVOID,
-) {
-    if context.is_null() || data.is_null() {
-        return;
-    }
-    let state = unsafe { &*(context as *const (Mutex<CaptureState>, Condvar)) };
-    let bytes = unsafe { std::slice::from_raw_parts(data, data_bytes as usize) };
-    if let Ok(mut capture) = state.0.lock() {
-        match io_handle {
-            wslc_sys::WslcProcessIOHandle::WSLC_PROCESS_IO_HANDLE_STDOUT => {
-                capture.stdout.extend_from_slice(bytes)
-            }
-            wslc_sys::WslcProcessIOHandle::WSLC_PROCESS_IO_HANDLE_STDERR => {
-                capture.stderr.extend_from_slice(bytes)
-            }
-            _ => {}
-        }
-    }
-}
-
-unsafe extern "system" fn exit_trampoline(exit_code: i32, context: wslc_sys::PVOID) {
-    if context.is_null() {
-        return;
-    }
-    let state = unsafe { &*(context as *const (Mutex<CaptureState>, Condvar)) };
-    if let Ok(mut capture) = state.0.lock() {
-        capture.status = Some(exit_code);
-        state.1.notify_all();
-    }
-}
+pub(crate) type CaptureRegistration = raw::CaptureRegistration;

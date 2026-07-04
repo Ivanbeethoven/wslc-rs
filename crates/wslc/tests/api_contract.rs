@@ -82,3 +82,35 @@ fn signal_values_match_linux_signal_numbers() {
     assert_eq!(Signal::Sigterm.as_raw(), 15);
     assert_eq!(Signal::Sigkill.as_raw(), 9);
 }
+
+#[test]
+fn safe_crate_sources_do_not_contain_unsafe_code() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let src_dir = manifest_dir.join("src");
+    let mut violations = Vec::new();
+
+    for entry in std::fs::read_dir(&src_dir).expect("read src dir") {
+        let path = entry.expect("read src entry").path();
+        if path.extension().and_then(|value| value.to_str()) != Some("rs") {
+            continue;
+        }
+
+        let source = std::fs::read_to_string(&path).expect("read source file");
+        for (line_number, line) in source.lines().enumerate() {
+            if line.contains("unsafe") || line.contains("extern \"system\"") {
+                violations.push(format!(
+                    "{}:{}: {}",
+                    path.strip_prefix(&manifest_dir).unwrap().display(),
+                    line_number + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "the safe wslc crate must not contain unsafe code:\n{}",
+        violations.join("\n")
+    );
+}

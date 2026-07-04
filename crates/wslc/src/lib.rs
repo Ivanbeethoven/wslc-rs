@@ -1,7 +1,5 @@
 //! Safe Rust wrapper for Microsoft WSL Containers.
 
-#![deny(unsafe_op_in_unsafe_fn)]
-
 mod container;
 mod image;
 mod process;

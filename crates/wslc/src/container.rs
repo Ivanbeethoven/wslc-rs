@@ -280,38 +280,29 @@ impl ContainerBuilder {
         let sdk = raw::sdk()?;
         let image = strings::cstring(&self.options.image, "image")?;
         let mut settings = wslc_sys::WslcContainerSettings::default();
-        let hr = unsafe { (sdk.WslcInitContainerSettings)(image.as_ptr(), &mut settings) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(sdk.init_container_settings(image.as_ptr(), &mut settings))?;
 
         let name;
         if let Some(value) = &self.name {
             name = strings::cstring(value, "container name")?;
-            let hr = unsafe { (sdk.WslcSetContainerSettingsName)(&mut settings, name.as_ptr()) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_name(&mut settings, name.as_ptr()))?;
         }
         let hostname;
         if let Some(value) = &self.hostname {
             hostname = strings::cstring(value, "hostname")?;
-            let hr =
-                unsafe { (sdk.WslcSetContainerSettingsHostName)(&mut settings, hostname.as_ptr()) };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_host_name(&mut settings, hostname.as_ptr()))?;
         }
         let domain_name;
         if let Some(value) = &self.domain_name {
             domain_name = strings::cstring(value, "domain_name")?;
-            let hr = unsafe {
-                (sdk.WslcSetContainerSettingsDomainName)(&mut settings, domain_name.as_ptr())
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_domain_name(&mut settings, domain_name.as_ptr()))?;
         }
 
-        let hr = unsafe {
-            (sdk.WslcSetContainerSettingsNetworkingMode)(&mut settings, self.networking.as_raw())
-        };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(
+            sdk.set_container_networking_mode(&mut settings, self.networking.as_raw()),
+        )?;
 
-        let hr = unsafe { (sdk.WslcSetContainerSettingsFlags)(&mut settings, self.flags) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        raw::map_result(sdk.set_container_flags(&mut settings, self.flags))?;
 
         let capture = if self.init_process.is_some() {
             Some(CaptureRegistration::new())
@@ -321,10 +312,7 @@ impl ContainerBuilder {
         let mut init_settings;
         if let Some(process) = &self.init_process {
             init_settings = process.to_raw(sdk, capture.as_ref())?;
-            let hr = unsafe {
-                (sdk.WslcSetContainerSettingsInitProcess)(&mut settings, &mut init_settings)
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_init_process(&mut settings, &mut init_settings))?;
         }
 
         let raw_ports: Vec<_> = self
@@ -338,14 +326,7 @@ impl ContainerBuilder {
             })
             .collect();
         if !raw_ports.is_empty() {
-            let hr = unsafe {
-                (sdk.WslcSetContainerSettingsPortMappings)(
-                    &mut settings,
-                    raw_ports.as_ptr(),
-                    raw_ports.len() as u32,
-                )
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_port_mappings(&mut settings, &raw_ports))?;
         }
 
         let windows_paths: Vec<_> = self
@@ -370,27 +351,10 @@ impl ContainerBuilder {
             })
             .collect();
         if !raw_volumes.is_empty() {
-            let hr = unsafe {
-                (sdk.WslcSetContainerSettingsVolumes)(
-                    &mut settings,
-                    raw_volumes.as_ptr(),
-                    raw_volumes.len() as u32,
-                )
-            };
-            unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+            raw::map_result(sdk.set_container_volumes(&mut settings, &raw_volumes))?;
         }
 
-        let mut raw_container = std::ptr::null_mut();
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcCreateContainer)(
-                self.session.raw(),
-                &settings,
-                &mut raw_container,
-                &mut error_message,
-            )
-        };
-        unsafe { raw::check_hr(hr, error_message) }?;
+        let raw_container = raw::map_result(sdk.create_container(self.session.raw(), &settings))?;
         let raw = NonNull::new(raw_container).ok_or_else(|| {
             Error::from_hresult(
                 wslc_sys::S_OK,
@@ -468,68 +432,47 @@ impl Container {
     /// Returns the container ID.
     pub fn id(&self) -> Result<String> {
         let sdk = raw::sdk()?;
-        let mut id = [0i8; wslc_sys::WSLC_CONTAINER_ID_BUFFER_SIZE];
-        let hr = unsafe { (sdk.WslcGetContainerID)(self.raw(), id.as_mut_ptr()) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
-        unsafe { strings::c_ptr_to_string(id.as_ptr()) }
+        raw::map_result(sdk.container_id(self.raw()))
     }
 
     /// Starts the container.
     pub fn start(&self) -> Result<()> {
         let sdk = raw::sdk()?;
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcStartContainer)(
-                self.raw(),
-                wslc_sys::WSLC_CONTAINER_START_FLAG_NONE,
-                &mut error_message,
-            )
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.start_container(self.raw(), wslc_sys::WSLC_CONTAINER_START_FLAG_NONE))
     }
 
     /// Starts the container attached.
     pub fn start_attached(&self) -> Result<()> {
         let sdk = raw::sdk()?;
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcStartContainer)(
-                self.raw(),
-                wslc_sys::WSLC_CONTAINER_START_FLAG_ATTACH,
-                &mut error_message,
-            )
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.start_container(self.raw(), wslc_sys::WSLC_CONTAINER_START_FLAG_ATTACH))
     }
 
     /// Starts the container and returns captured output.
     pub fn start_and_wait(&self) -> Result<Output> {
         self.start_attached()?;
-        Ok(self
+        let output = self
             .inner
             .init_capture
             .as_ref()
             .map(CaptureRegistration::wait_output)
-            .unwrap_or_default())
+            .unwrap_or_default();
+        Ok(Output {
+            status: output.status,
+            stdout: output.stdout,
+            stderr: output.stderr,
+        })
     }
 
     /// Returns raw inspect JSON.
     pub fn inspect(&self) -> Result<String> {
         let sdk = raw::sdk()?;
-        let mut inspect = std::ptr::null_mut();
-        let hr = unsafe { (sdk.WslcInspectContainer)(self.raw(), &mut inspect) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
-        let value = unsafe { strings::c_ptr_to_string(inspect) }?;
-        raw::free_cotaskmem(inspect.cast());
-        Ok(value)
+        raw::map_result(sdk.inspect_container(self.raw()))
     }
 
     /// Returns container state.
     pub fn state(&self) -> Result<ContainerState> {
         let sdk = raw::sdk()?;
-        let mut state = wslc_sys::WslcContainerState::WSLC_CONTAINER_STATE_INVALID;
-        let hr = unsafe { (sdk.WslcGetContainerState)(self.raw(), &mut state) };
-        unsafe { raw::check_hr(hr, std::ptr::null_mut()) }?;
+        let state = raw::map_result(sdk.container_state(self.raw()))?;
         Ok(state.into())
     }
 
@@ -537,17 +480,8 @@ impl Container {
     pub fn exec(&self, options: ProcessOptions) -> Result<Process> {
         let sdk = raw::sdk()?;
         let mut process_settings = options.to_raw(sdk, None)?;
-        let mut raw_process = std::ptr::null_mut();
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcCreateContainerProcess)(
-                self.raw(),
-                &mut process_settings,
-                &mut raw_process,
-                &mut error_message,
-            )
-        };
-        unsafe { raw::check_hr(hr, error_message) }?;
+        let raw_process =
+            raw::map_result(sdk.create_container_process(self.raw(), &mut process_settings))?;
         let raw = NonNull::new(raw_process).ok_or_else(|| {
             Error::from_hresult(
                 wslc_sys::S_OK,
@@ -564,25 +498,13 @@ impl Container {
         let timeout_seconds = u32::try_from(timeout.as_secs())
             .map_err(|_| Error::InvalidInput("timeout does not fit in u32 seconds".to_owned()))?;
         let sdk = raw::sdk()?;
-        let mut error_message = std::ptr::null_mut();
-        let hr = unsafe {
-            (sdk.WslcStopContainer)(
-                self.raw(),
-                signal.as_raw_signal(),
-                timeout_seconds,
-                &mut error_message,
-            )
-        };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.stop_container(self.raw(), signal.as_raw_signal(), timeout_seconds))
     }
 
     /// Deletes the container.
     pub fn delete(&self, options: DeleteContainerOptions) -> Result<()> {
         let sdk = raw::sdk()?;
-        let mut error_message = std::ptr::null_mut();
-        let hr =
-            unsafe { (sdk.WslcDeleteContainer)(self.raw(), options.as_raw(), &mut error_message) };
-        unsafe { raw::check_hr(hr, error_message) }
+        raw::map_result(sdk.delete_container(self.raw(), options.as_raw()))
     }
 }
 
@@ -590,9 +512,7 @@ impl Drop for ContainerInner {
     fn drop(&mut self) {
         if let Ok(sdk) = raw::sdk() {
             let _com = crate::com::try_initialize_mta().ok().flatten();
-            unsafe {
-                let _ = (sdk.WslcReleaseContainer)(self.raw.as_ptr());
-            }
+            let _ = sdk.release_container(self.raw.as_ptr());
         }
     }
 }

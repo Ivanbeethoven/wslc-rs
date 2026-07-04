@@ -9,6 +9,8 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
+pub mod runtime;
+
 use core::ffi::{c_char, c_void};
 
 /// HRESULT-compatible return value.

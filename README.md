@@ -12,11 +12,12 @@ a traditional WSL distro-management crate.
 
 ## Crates
 
-- `wslc-sys`: raw ABI-compatible Rust types for the public `wslcsdk.h` surface.
-  It does not link to Microsoft binaries.
+- `wslc-sys`: raw ABI-compatible Rust types plus the runtime unsafe boundary
+  for loading `wslcsdk.dll`, calling SDK exports, handling callbacks, and
+  releasing SDK-allocated memory. It does not redistribute Microsoft binaries.
 - `wslc`: safe blocking wrapper with builders, input validation, HRESULT error
-  mapping, RAII handle release, runtime SDK loading, and MVP session/container
-  APIs.
+  mapping, RAII handle release, and MVP session/container APIs. The safe crate
+  keeps SDK `unsafe` code out of its source tree.
 
 ## Quick Start
 
@@ -88,7 +89,7 @@ it explicitly with `-- --ignored` when registry access is available.
 
 Implemented in `0.1.0`:
 
-- raw ABI types and layout tests;
+- raw ABI types, runtime FFI boundary, and layout tests;
 - service availability/version checks;
 - session builder and lifecycle;
 - image pull with progress callback;

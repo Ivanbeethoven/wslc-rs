@@ -1,4 +1,4 @@
-use std::ffi::{CStr, CString, OsStr};
+use std::ffi::{CString, OsStr};
 use std::path::Path;
 
 use crate::{Error, Result};
@@ -39,29 +39,6 @@ pub(crate) fn wide_path(value: &Path) -> Vec<u16> {
 
 pub(crate) fn wide_str(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-pub(crate) unsafe fn utf16_ptr_to_string(ptr: *const u16) -> String {
-    if ptr.is_null() {
-        return String::new();
-    }
-
-    let mut len = 0usize;
-    while unsafe { *ptr.add(len) } != 0 {
-        len += 1;
-    }
-
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-    String::from_utf16_lossy(slice)
-}
-
-pub(crate) unsafe fn c_ptr_to_string(ptr: *const std::ffi::c_char) -> Result<String> {
-    if ptr.is_null() {
-        return Ok(String::new());
-    }
-
-    let bytes = unsafe { CStr::from_ptr(ptr) }.to_bytes().to_vec();
-    Ok(String::from_utf8(bytes)?)
 }
 
 #[cfg(test)]
