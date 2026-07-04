@@ -97,7 +97,12 @@ On Windows MSVC, libFuzzer also needs the LLVM/Clang ASan runtime libraries on
 the linker search path. If `cargo fuzz run` reports a missing
 `clang_rt.asan_dynamic_runtime_thunk-x86_64.lib`, install the LLVM/Clang tools
 for your Visual Studio toolchain or add the directory containing that library to
-`LIB`.
+`LIB`. At runtime, add the matching ASan DLL directory to `PATH`, for example:
+
+```powershell
+$msvc = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120"
+$env:PATH="$msvc\bin\Hostx64\x64;$env:PATH"
+```
 
 ## Status
 
