@@ -10,7 +10,7 @@ use wslc::{
     VhdOptions, WslcErrorKind,
 };
 
-const DEFAULT_ALPINE_IMAGE: &str = "um1aojh4p148gc.xuanyuan.run/library/alpine:latest";
+const DEFAULT_ALPINE_IMAGE: &str = "docker.io/library/alpine:latest";
 
 fn unique_name(prefix: &str) -> String {
     let nanos = SystemTime::now()

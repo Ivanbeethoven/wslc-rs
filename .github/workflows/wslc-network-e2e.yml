@@ -28,7 +28,7 @@ on:
       alpine_image:
         description: "Alpine image reference used by the real pull/container E2E"
         required: false
-        default: "um1aojh4p148gc.xuanyuan.run/library/alpine:latest"
+        default: "docker.io/library/alpine:latest"
 
 jobs:
   hosted-preflight:

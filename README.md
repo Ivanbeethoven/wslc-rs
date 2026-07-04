@@ -87,7 +87,7 @@ it explicitly with `-- --ignored` when registry access is available. Override th
 image with `WSLC_ALPINE_IMAGE` when needed:
 
 ```powershell
-$env:WSLC_ALPINE_IMAGE="um1aojh4p148gc.xuanyuan.run/library/alpine:latest"
+$env:WSLC_ALPINE_IMAGE="<your-registry>/library/alpine:latest"
 cargo test -p wslc --features integration --test integration_smoke -- --ignored --nocapture
 ```
 
