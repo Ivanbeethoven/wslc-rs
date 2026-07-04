@@ -1,4 +1,5 @@
 use crate::{raw, strings, Error, Result};
+use std::ffi::CString;
 use std::rc::Rc;
 
 /// Output capture mode for a process.
@@ -143,7 +144,7 @@ impl ProcessOptions {
         &self,
         sdk: &raw::Sdk,
         capture: Option<&CaptureRegistration>,
-    ) -> Result<wslc_sys::WslcProcessSettings> {
+    ) -> Result<RawProcessSettings> {
         self.validate()?;
         let mut settings = wslc_sys::WslcProcessSettings::default();
         raw::map_result(sdk.init_process_settings(&mut settings))?;
@@ -175,8 +176,18 @@ impl ProcessOptions {
             raw::map_result(sdk.set_process_capture_callbacks(&mut settings, capture))?;
         }
 
-        Ok(settings)
+        Ok(RawProcessSettings {
+            settings,
+            _argv: argv,
+            _env: env_c,
+        })
     }
+}
+
+pub(crate) struct RawProcessSettings {
+    pub settings: wslc_sys::WslcProcessSettings,
+    _argv: Vec<CString>,
+    _env: Vec<CString>,
 }
 
 /// Process output.

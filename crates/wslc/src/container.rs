@@ -315,7 +315,9 @@ impl ContainerBuilder {
         let mut init_settings;
         if let Some(process) = &self.init_process {
             init_settings = process.to_raw(sdk, capture.as_ref())?;
-            raw::map_result(sdk.set_container_init_process(&mut settings, &mut init_settings))?;
+            raw::map_result(
+                sdk.set_container_init_process(&mut settings, &mut init_settings.settings),
+            )?;
         }
 
         let raw_ports: Vec<_> = self
@@ -483,8 +485,9 @@ impl Container {
     pub fn exec(&self, options: ProcessOptions) -> Result<Process> {
         let sdk = raw::sdk()?;
         let mut process_settings = options.to_raw(sdk, None)?;
-        let raw_process =
-            raw::map_result(sdk.create_container_process(self.raw(), &mut process_settings))?;
+        let raw_process = raw::map_result(
+            sdk.create_container_process(self.raw(), &mut process_settings.settings),
+        )?;
         let raw = NonNull::new(raw_process).ok_or_else(|| {
             Error::from_hresult(
                 wslc_sys::S_OK,

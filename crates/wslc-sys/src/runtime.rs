@@ -705,8 +705,9 @@ impl Sdk {
         settings: &mut WslcProcessSettings,
         argv: &[PCSTR],
     ) -> Result<()> {
-        let hr =
-            unsafe { (self.WslcSetProcessSettingsCmdLine)(settings, argv.as_ptr(), argv.len()) };
+        let hr = unsafe {
+            (self.WslcSetProcessSettingsCmdLine)(settings, argv.as_ptr().cast(), argv.len())
+        };
         check_hr(hr, std::ptr::null_mut())
     }
 
@@ -726,8 +727,9 @@ impl Sdk {
         settings: &mut WslcProcessSettings,
         env: &[PCSTR],
     ) -> Result<()> {
-        let hr =
-            unsafe { (self.WslcSetProcessSettingsEnvVariables)(settings, env.as_ptr(), env.len()) };
+        let hr = unsafe {
+            (self.WslcSetProcessSettingsEnvVariables)(settings, env.as_ptr().cast(), env.len())
+        };
         check_hr(hr, std::ptr::null_mut())
     }
 

@@ -375,6 +375,46 @@ fn safe_crate_sources_do_not_contain_unsafe_code() {
 }
 
 #[test]
+fn sys_runtime_wraps_process_string_arrays_as_pcstr_values() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+    let runtime = std::fs::read_to_string(workspace.join("crates/wslc-sys/src/runtime.rs"))
+        .expect("read wslc-sys runtime");
+
+    assert!(
+        runtime.contains("argv.as_ptr().cast()"),
+        "process argv must pass a pointer to PCSTR values, not raw C string pointers"
+    );
+    assert!(
+        runtime.contains("env.as_ptr().cast()"),
+        "process env must pass a pointer to PCSTR values, not raw C string pointers"
+    );
+}
+
+#[test]
+fn process_raw_settings_keep_string_storage_alive() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let process_source =
+        std::fs::read_to_string(manifest_dir.join("src/process.rs")).expect("read process source");
+
+    assert!(
+        process_source.contains("pub(crate) struct RawProcessSettings"),
+        "process raw settings should own backing CString storage"
+    );
+    assert!(
+        process_source.contains("_argv: Vec<CString>"),
+        "process argv CString storage must outlive the SDK settings call"
+    );
+    assert!(
+        process_source.contains("_env: Vec<CString>"),
+        "process env CString storage must outlive the SDK settings call"
+    );
+}
+
+#[test]
 fn repository_links_point_to_ivanbeethoven_repo() {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()

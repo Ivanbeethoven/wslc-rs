@@ -82,8 +82,14 @@ cargo test -p wslc --features integration --test integration_smoke
 ```
 
 The default integration suite checks service availability and session lifecycle.
-The Alpine echo test is ignored by default because it pulls from Docker Hub; run
-it explicitly with `-- --ignored` when registry access is available.
+The Alpine echo test is ignored by default because it pulls a registry image; run
+it explicitly with `-- --ignored` when registry access is available. Override the
+image with `WSLC_ALPINE_IMAGE` when needed:
+
+```powershell
+$env:WSLC_ALPINE_IMAGE="um1aojh4p148gc.xuanyuan.run/library/alpine:latest"
+cargo test -p wslc --features integration --test integration_smoke -- --ignored --nocapture
+```
 
 The repository also includes a manual GitHub Actions workflow,
 `WSLC network E2E`, that installs the preview SDK from NuGet on a Windows runner

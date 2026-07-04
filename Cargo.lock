@@ -4,11 +4,11 @@ version = 3
 
 [[package]]
 name = "wslc"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "wslc-sys",
 ]
 
 [[package]]
 name = "wslc-sys"
-version = "0.1.1"
+version = "0.1.2"

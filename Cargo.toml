@@ -7,7 +7,7 @@ exclude = ["fuzz"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ivanbeethoven/wslc-rs"
@@ -18,4 +18,4 @@ keywords = ["wsl", "containers", "windows", "ffi"]
 categories = ["api-bindings", "os::windows-apis"]
 
 [workspace.dependencies]
-wslc-sys = { version = "0.1.1", path = "crates/wslc-sys" }
+wslc-sys = { version = "0.1.2", path = "crates/wslc-sys" }

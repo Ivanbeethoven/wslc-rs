@@ -25,6 +25,10 @@ on:
         description: "Microsoft.WSL.Containers NuGet package version"
         required: false
         default: "2.9.3"
+      alpine_image:
+        description: "Alpine image reference used by the real pull/container E2E"
+        required: false
+        default: "um1aojh4p148gc.xuanyuan.run/library/alpine:latest"
 
 jobs:
   hosted-preflight:
@@ -112,6 +116,7 @@ jobs:
     timeout-minutes: 45
     env:
       WSLC_SDK_PACKAGE_VERSION: ${{ inputs.package_version }}
+      WSLC_ALPINE_IMAGE: ${{ inputs.alpine_image }}
 
     steps:
       - name: Checkout

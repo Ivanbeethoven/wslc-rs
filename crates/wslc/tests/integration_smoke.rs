@@ -10,6 +10,8 @@ use wslc::{
     VhdOptions, WslcErrorKind,
 };
 
+const DEFAULT_ALPINE_IMAGE: &str = "um1aojh4p148gc.xuanyuan.run/library/alpine:latest";
+
 fn unique_name(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -20,6 +22,10 @@ fn unique_name(prefix: &str) -> String {
 
 fn storage_path(name: &str) -> PathBuf {
     PathBuf::from(format!(r"C:\WslcData\{name}"))
+}
+
+fn alpine_image() -> String {
+    std::env::var("WSLC_ALPINE_IMAGE").unwrap_or_else(|_| DEFAULT_ALPINE_IMAGE.to_owned())
 }
 
 fn start_session(prefix: &str) -> Session {
@@ -136,14 +142,15 @@ fn rust_side_validation_runs_before_wslc_calls() {
 }
 
 #[test]
-#[ignore = "requires Docker Hub access and pulls docker.io/library/alpine:latest"]
+#[ignore = "requires registry access and pulls an Alpine image"]
 fn alpine_echo_smoke_test() {
     let session = start_session("wslc-rs-integration");
+    let image = alpine_image();
 
     let progress_events = Arc::new(Mutex::new(Vec::<ImageProgress>::new()));
     let progress_sink = Arc::clone(&progress_events);
     session
-        .pull_image(ImagePullOptions::new("docker.io/library/alpine:latest"))
+        .pull_image(ImagePullOptions::new(&image))
         .on_progress(move |progress| {
             progress_sink
                 .lock()
@@ -173,7 +180,7 @@ fn alpine_echo_smoke_test() {
     );
 
     let output = session
-        .container(wslc::ContainerOptions::new("alpine:latest"))
+        .container(wslc::ContainerOptions::new(&image))
         .name("wslc-rs-integration-echo")
         .init_process(ProcessOptions::new(["/bin/echo", "hello from wslc-rs"]).capture_stdout())
         .auto_remove(true)
