@@ -102,6 +102,13 @@ impl ProcessOptions {
         self
     }
 
+    pub(crate) fn captures_output(&self) -> bool {
+        matches!(
+            self.output_mode,
+            OutputMode::Capture | OutputMode::Streaming { .. }
+        )
+    }
+
     /// Validates process options.
     pub fn validate(&self) -> Result<()> {
         if self.cmdline.is_empty() {
@@ -301,3 +308,23 @@ impl Drop for ProcessInner {
 }
 
 pub(crate) type CaptureRegistration = raw::CaptureRegistration;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_options_only_capture_when_requested() {
+        assert!(!ProcessOptions::new(["/bin/sleep", "30"]).captures_output());
+        assert!(ProcessOptions::new(["/bin/echo", "hello"])
+            .capture_stdout()
+            .captures_output());
+        assert!(ProcessOptions::new(["/bin/echo", "hello"])
+            .streaming()
+            .captures_output());
+        assert!(!ProcessOptions::new(["/bin/echo", "hello"])
+            .capture_stdout()
+            .inherit_output()
+            .captures_output());
+    }
+}

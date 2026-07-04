@@ -458,3 +458,22 @@ fn repository_links_point_to_ivanbeethoven_repo() {
         violations.join("\n")
     );
 }
+
+#[test]
+fn sdk_validation_examples_are_present() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let examples = [
+        "hello.rs",
+        "service_info.rs",
+        "list_images.rs",
+        "vhd_volume.rs",
+        "container_inspect.rs",
+    ];
+
+    for example in examples {
+        assert!(
+            manifest_dir.join("examples").join(example).is_file(),
+            "missing SDK validation example: {example}"
+        );
+    }
+}

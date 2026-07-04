@@ -308,7 +308,11 @@ impl ContainerBuilder {
 
         raw::map_result(sdk.set_container_flags(&mut settings, self.flags))?;
 
-        let capture = if self.init_process.is_some() {
+        let capture = if self
+            .init_process
+            .as_ref()
+            .is_some_and(ProcessOptions::captures_output)
+        {
             Some(CaptureRegistration::new())
         } else {
             None

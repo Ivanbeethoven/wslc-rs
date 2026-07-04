@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::time::Duration;
 
 use wslc::{
@@ -6,16 +5,21 @@ use wslc::{
     Signal,
 };
 
+mod common;
+
+const ALPINE_IMAGE: &str = "docker.io/library/alpine:latest";
+
 fn main() -> wslc::Result<()> {
     Service::ensure_available()?;
 
-    let session = Session::builder("hello-wslc-rs", PathBuf::from(r"C:\WslcData\hello-wslc-rs"))
+    let name = common::unique_name("hello-wslc-rs");
+    let session = Session::builder(&name, common::storage_path(&name))
         .cpu_count(2)
         .memory_mb(2048)
         .start()?;
 
     session
-        .pull_image(ImagePullOptions::new("docker.io/library/alpine:latest"))
+        .pull_image(ImagePullOptions::new(ALPINE_IMAGE))
         .on_progress(|p| {
             println!("pull: {:?} {}/{}", p.status, p.current_bytes, p.total_bytes);
         })
@@ -26,8 +30,8 @@ fn main() -> wslc::Result<()> {
         .capture_stderr();
 
     let container = session
-        .container(ContainerOptions::new("alpine:latest"))
-        .name("hello-wslc-rs")
+        .container(ContainerOptions::new(ALPINE_IMAGE))
+        .name(name)
         .init_process(process)
         .auto_remove(true)
         .create()?;
