@@ -26,17 +26,16 @@ on:
         required: false
         default: "2.9.3"
 
-env:
-  WSLC_SDK_PACKAGE_VERSION: ${{ inputs.package_version || '2.9.3' }}
-  WSLC_RUNNER_LABELS: ${{ inputs.runner_labels || '["windows-latest"]' }}
-
 jobs:
   alpine-echo:
     name: Pull Alpine and run echo
-    runs-on: ${{ fromJSON(env.WSLC_RUNNER_LABELS) }}
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      WSLC_SDK_PACKAGE_VERSION: "2.9.3"
 
-    steps:
+    steps: &e2e-steps
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -99,3 +98,13 @@ jobs:
       - name: Run Docker Hub Alpine E2E
         shell: pwsh
         run: cargo test -p wslc --features integration --test integration_smoke -- --ignored --nocapture
+
+  alpine-echo-manual:
+    name: Pull Alpine and run echo
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 45
+    env:
+      WSLC_SDK_PACKAGE_VERSION: ${{ inputs.package_version }}
+
+    steps: *e2e-steps
