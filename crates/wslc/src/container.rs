@@ -36,18 +36,13 @@ impl ContainerOptions {
 }
 
 /// Container networking mode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum NetworkingMode {
     /// No networking.
     None,
     /// Bridged networking.
+    #[default]
     Bridged,
-}
-
-impl Default for NetworkingMode {
-    fn default() -> Self {
-        Self::Bridged
-    }
 }
 
 impl NetworkingMode {

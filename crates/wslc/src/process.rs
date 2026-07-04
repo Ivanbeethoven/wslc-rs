@@ -3,8 +3,10 @@ use std::ffi::CString;
 use std::rc::Rc;
 
 /// Output capture mode for a process.
+#[derive(Default)]
 pub enum OutputMode {
     /// Discard process output.
+    #[default]
     Null,
     /// Capture stdout and stderr.
     Capture,
@@ -26,12 +28,6 @@ impl std::fmt::Debug for OutputMode {
             Self::Capture => f.write_str("Capture"),
             Self::Streaming { .. } => f.write_str("Streaming"),
         }
-    }
-}
-
-impl Default for OutputMode {
-    fn default() -> Self {
-        Self::Null
     }
 }
 
