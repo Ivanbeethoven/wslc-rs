@@ -85,6 +85,12 @@ The default integration suite checks service availability and session lifecycle.
 The Alpine echo test is ignored by default because it pulls from Docker Hub; run
 it explicitly with `-- --ignored` when registry access is available.
 
+The repository also includes a manual GitHub Actions workflow,
+`WSLC network E2E`, that installs the preview SDK from NuGet on a Windows runner
+and runs the ignored Alpine pull/container test. Trigger it from the Actions tab
+with runner labels such as `["windows-latest"]` or
+`["self-hosted","Windows","X64"]`.
+
 Fuzz targets live under `fuzz/` and focus on pure Rust validation paths that do
 not call the WSLC runtime:
 
