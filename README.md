@@ -65,6 +65,26 @@ $env:WSLC_SDK_DIR="C:\Users\<you>\.nuget\packages\microsoft.wsl.containers\<vers
 $env:PATH="$env:WSLC_SDK_DIR\runtimes\win-x64\native;$env:PATH"
 ```
 
+## Registry Mirrors
+
+By default, image references are passed to WSLC unchanged. Set
+`WSLC_REGISTRY_MIRROR` to rewrite Docker Hub references before they reach the
+SDK:
+
+```powershell
+$env:WSLC_REGISTRY_MIRROR="<your-registry>"
+```
+
+This maps `docker.io/library/alpine:latest` to
+`<your-registry>/library/alpine:latest`, and `alpine:latest` to
+`<your-registry>/alpine:latest`. For other registries, use a registry-specific
+environment variable by uppercasing the registry and replacing non-alphanumeric
+characters with `_`, for example:
+
+```powershell
+$env:WSLC_REGISTRY_MIRROR_GHCR_IO="<your-ghcr-mirror>"
+```
+
 ## Testing
 
 Ordinary tests do not require WSLC:
@@ -84,10 +104,10 @@ cargo test -p wslc --features integration --test integration_smoke
 The default integration suite checks service availability and session lifecycle.
 The Alpine echo test is ignored by default because it pulls a registry image; run
 it explicitly with `-- --ignored` when registry access is available. Override the
-image with `WSLC_ALPINE_IMAGE` when needed:
+Docker Hub registry with `WSLC_REGISTRY_MIRROR` when needed:
 
 ```powershell
-$env:WSLC_ALPINE_IMAGE="<your-registry>/library/alpine:latest"
+$env:WSLC_REGISTRY_MIRROR="<your-registry>"
 cargo test -p wslc --features integration --test integration_smoke -- --ignored --nocapture
 ```
 

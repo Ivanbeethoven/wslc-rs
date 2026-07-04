@@ -24,10 +24,6 @@ fn storage_path(name: &str) -> PathBuf {
     PathBuf::from(format!(r"C:\WslcData\{name}"))
 }
 
-fn alpine_image() -> String {
-    std::env::var("WSLC_ALPINE_IMAGE").unwrap_or_else(|_| DEFAULT_ALPINE_IMAGE.to_owned())
-}
-
 fn start_session(prefix: &str) -> Session {
     Service::ensure_available().expect("WSLC service should be available for integration tests");
 
@@ -145,12 +141,11 @@ fn rust_side_validation_runs_before_wslc_calls() {
 #[ignore = "requires registry access and pulls an Alpine image"]
 fn alpine_echo_smoke_test() {
     let session = start_session("wslc-rs-integration");
-    let image = alpine_image();
 
     let progress_events = Arc::new(Mutex::new(Vec::<ImageProgress>::new()));
     let progress_sink = Arc::clone(&progress_events);
     session
-        .pull_image(ImagePullOptions::new(&image))
+        .pull_image(ImagePullOptions::new(DEFAULT_ALPINE_IMAGE))
         .on_progress(move |progress| {
             progress_sink
                 .lock()
@@ -180,7 +175,7 @@ fn alpine_echo_smoke_test() {
     );
 
     let output = session
-        .container(wslc::ContainerOptions::new(&image))
+        .container(wslc::ContainerOptions::new(DEFAULT_ALPINE_IMAGE))
         .name("wslc-rs-integration-echo")
         .init_process(ProcessOptions::new(["/bin/echo", "hello from wslc-rs"]).capture_stdout())
         .auto_remove(true)

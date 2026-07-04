@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::process::{CaptureRegistration, Output, Process, ProcessInner, ProcessOptions};
-use crate::{raw, strings, Error, Result, Session};
+use crate::{raw, registry, strings, Error, Result, Session};
 
 /// Container creation options.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -281,7 +281,8 @@ impl ContainerBuilder {
     pub fn create(self) -> Result<Container> {
         self.validate()?;
         let sdk = raw::sdk()?;
-        let image = strings::cstring(&self.options.image, "image")?;
+        let resolved_image = registry::resolve_image_reference(&self.options.image)?;
+        let image = strings::cstring(&resolved_image, "image")?;
         let mut settings = wslc_sys::WslcContainerSettings::default();
         raw::map_result(sdk.init_container_settings(image.as_ptr(), &mut settings))?;
 

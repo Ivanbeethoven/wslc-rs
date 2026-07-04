@@ -25,10 +25,10 @@ on:
         description: "Microsoft.WSL.Containers NuGet package version"
         required: false
         default: "2.9.3"
-      alpine_image:
-        description: "Alpine image reference used by the real pull/container E2E"
+      registry_mirror:
+        description: "Optional Docker Hub registry mirror host used by the real pull/container E2E"
         required: false
-        default: "docker.io/library/alpine:latest"
+        default: ""
 
 jobs:
   hosted-preflight:
@@ -116,7 +116,7 @@ jobs:
     timeout-minutes: 45
     env:
       WSLC_SDK_PACKAGE_VERSION: ${{ inputs.package_version }}
-      WSLC_ALPINE_IMAGE: ${{ inputs.alpine_image }}
+      WSLC_REGISTRY_MIRROR: ${{ inputs.registry_mirror }}
 
     steps:
       - name: Checkout

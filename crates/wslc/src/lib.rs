@@ -4,6 +4,7 @@ mod container;
 mod image;
 mod process;
 mod raw;
+mod registry;
 mod service;
 mod session;
 mod storage;

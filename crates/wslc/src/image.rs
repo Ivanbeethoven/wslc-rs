@@ -1,4 +1,4 @@
-use crate::{raw, strings, Error, Result, Session};
+use crate::{raw, registry, strings, Error, Result, Session};
 
 /// Options for pulling an image.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,7 +64,8 @@ impl<'a> ImagePullOperation<'a> {
     pub fn run(mut self) -> Result<()> {
         self.options.validate()?;
         let sdk = raw::sdk()?;
-        let uri = strings::cstring(&self.options.uri, "image uri")?;
+        let resolved_uri = registry::resolve_image_reference(&self.options.uri)?;
+        let uri = strings::cstring(&resolved_uri, "image uri")?;
         let registry_auth;
         let registry_auth_ptr = if let Some(auth) = &self.options.registry_auth {
             registry_auth = strings::cstring(auth, "registry_auth")?;
