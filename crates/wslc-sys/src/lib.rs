@@ -289,7 +289,7 @@ pub const WSLC_CONTAINER_FLAG_AUTO_REMOVE: WslcContainerFlags = 0x0000_0001;
 /// Enable GPU for the container.
 pub const WSLC_CONTAINER_FLAG_ENABLE_GPU: WslcContainerFlags = 0x0000_0002;
 /// Run the container as privileged.
-pub const WSLC_CONTAINER_FLAG_PRIVILEGED: WslcContainerFlags = 0x0000_0004;
+pub const WSLC_CONTAINER_FLAG_PRIVILEGED: WslcContainerFlags = 0x0000_0080;
 
 /// Container start flags.
 pub type WslcContainerStartFlags = u32;
