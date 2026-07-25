@@ -405,12 +405,20 @@ fn process_raw_settings_keep_string_storage_alive() {
         "process raw settings should own backing CString storage"
     );
     assert!(
-        process_source.contains("_argv: Vec<CString>"),
-        "process argv CString storage must outlive the SDK settings call"
+        process_source.contains("_argv: RetainedCStringArray"),
+        "process argv strings and pointer array must outlive the SDK settings call"
     );
     assert!(
-        process_source.contains("_env: Vec<CString>"),
-        "process env CString storage must outlive the SDK settings call"
+        process_source.contains("_env: RetainedCStringArray"),
+        "process env strings and pointer array must outlive the SDK settings call"
+    );
+    assert!(
+        process_source.contains("pointers: Vec<wslc_sys::PCSTR>"),
+        "process settings must retain the pointer arrays borrowed by the SDK"
+    );
+    assert!(
+        process_source.contains("_working_dir: Option<CString>"),
+        "process working directory storage must outlive the SDK settings call"
     );
 }
 

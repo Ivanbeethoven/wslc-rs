@@ -28,7 +28,6 @@ fn privileged_container_fuse_test() {
         .start()
         .expect("session should start");
 
-    // Pull debian image
     let pull_opts = ImagePullOptions::new("docker.io/library/debian:trixie-slim");
     session
         .pull_image(pull_opts)
@@ -38,10 +37,8 @@ fn privileged_container_fuse_test() {
         .run()
         .expect("should pull debian image");
 
-    // Run everything as a single init process via start_and_wait
     let script = r#"
-apt-get update -qq
-apt-get install -y -qq fuse3
+set -eu
 echo "=== SECCOMP ==="
 cat /proc/1/status | grep -i seccomp
 echo "=== CAPS ==="
@@ -49,14 +46,16 @@ cat /proc/1/status | grep Cap
 echo "=== FUSE MODULES ==="
 grep fuse /proc/filesystems || echo "NO_FUSE_MODULES"
 echo "=== FUSE DEV ==="
-ls -la /dev/fuse 2>&1 || echo "NO_FUSE_DEV"
-echo "=== MKNOD ==="
-mknod /dev/fuse c 10 229 2>&1 || echo "MKNOD_FAILED"
-echo "=== FUSE DEV AFTER MKNOD ==="
-ls -la /dev/fuse 2>&1 || echo "STILL_NO_FUSE_DEV"
-echo "=== DD TEST ==="
-dd if=/dev/fuse of=/dev/null bs=1 count=1 2>&1
-echo "DD_EXIT=$?"
+ls -la /dev/fuse
+test -c /dev/fuse
+echo "=== OPEN TEST ==="
+if exec 3<>/dev/fuse; then
+    echo "FUSE_OPEN_OK"
+    exec 3>&-
+else
+    echo "FUSE_OPEN_FAILED"
+    exit 1
+fi
 echo "=== DONE ==="
 "#;
 
@@ -85,20 +84,9 @@ echo "=== DONE ==="
     eprintln!("=== STDOUT ===\n{stdout}");
     eprintln!("=== STDERR ===\n{stderr}");
 
-    // Check that dd did not fail with Operation not permitted
     let combined = format!("{stdout}{stderr}");
     assert!(
-        !combined.contains("Operation not permitted"),
+        combined.contains("FUSE_OPEN_OK"),
         "FUSE device should be accessible in privileged container!\nOutput:\n{combined}"
     );
-
-    // If dd reports 0+0 records, /dev/fuse exists but is empty (expected for new fuse dev)
-    // That's fine - the key is it's accessible
-    if combined.contains("STILL_NO_FUSE_DEV") {
-        eprintln!("WARNING: /dev/fuse could not be created. FUSE kernel support may be missing.");
-    } else if combined.contains("Operation not permitted") {
-        panic!("FUSE device exists but access is blocked by seccomp!");
-    } else {
-        eprintln!("PASS: FUSE device is accessible and working!");
-    }
 }

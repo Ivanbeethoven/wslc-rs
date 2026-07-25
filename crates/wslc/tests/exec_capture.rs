@@ -12,7 +12,7 @@ fn unique_name(prefix: &str) -> String {
 }
 
 fn session_dir(name: &str) -> PathBuf {
-    PathBuf::from(format!("C:\\WslcData\\{}", name))
+    PathBuf::from(format!("C:\\WslcData\\{name}"))
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn exec_captures_stdout() {
 
     let mirror = std::env::var("WSLC_REGISTRY_MIRROR").ok();
     let image = mirror
-        .map(|m| format!("{}/library/alpine:latest", m))
+        .map(|m| format!("{m}/library/alpine:latest"))
         .unwrap_or_else(|| "docker.io/library/alpine:latest".to_string());
 
     session
@@ -37,7 +37,7 @@ fn exec_captures_stdout() {
 
     let container = session
         .container(ContainerOptions::new(&image))
-        .name(&format!("{}-container", name))
+        .name(format!("{name}-container"))
         .init_process(ProcessOptions::new(["/bin/sleep", "60"]))
         .auto_remove(true)
         .create()

@@ -152,13 +152,18 @@ impl ProcessOptions {
         let mut settings = wslc_sys::WslcProcessSettings::default();
         raw::map_result(sdk.init_process_settings(&mut settings))?;
 
-        let argv = strings::cstrings(self.cmdline.iter().map(String::as_str), "process arg")?;
-        let argv_ptrs: Vec<_> = argv.iter().map(|arg| arg.as_ptr()).collect();
-        raw::map_result(sdk.set_process_cmdline(&mut settings, &argv_ptrs))?;
+        let argv = RetainedCStringArray::new(strings::cstrings(
+            self.cmdline.iter().map(String::as_str),
+            "process arg",
+        )?);
+        raw::map_result(sdk.set_process_cmdline(&mut settings, argv.pointers()))?;
 
-        let working_dir;
-        if let Some(dir) = &self.working_dir {
-            working_dir = strings::cstring(dir, "working_dir")?;
+        let working_dir = self
+            .working_dir
+            .as_deref()
+            .map(|dir| strings::cstring(dir, "working_dir"))
+            .transpose()?;
+        if let Some(working_dir) = &working_dir {
             raw::map_result(
                 sdk.set_process_working_directory(&mut settings, working_dir.as_ptr()),
             )?;
@@ -169,10 +174,12 @@ impl ProcessOptions {
             .iter()
             .map(|(key, value)| format!("{key}={value}"))
             .collect();
-        let env_c = strings::cstrings(env_values.iter().map(String::as_str), "env")?;
-        let env_ptrs: Vec<_> = env_c.iter().map(|value| value.as_ptr()).collect();
-        if !env_ptrs.is_empty() {
-            raw::map_result(sdk.set_process_env_variables(&mut settings, &env_ptrs))?;
+        let env = RetainedCStringArray::new(strings::cstrings(
+            env_values.iter().map(String::as_str),
+            "env",
+        )?);
+        if !env.pointers().is_empty() {
+            raw::map_result(sdk.set_process_env_variables(&mut settings, env.pointers()))?;
         }
 
         if let Some(capture) = capture {
@@ -182,15 +189,36 @@ impl ProcessOptions {
         Ok(RawProcessSettings {
             settings,
             _argv: argv,
-            _env: env_c,
+            _working_dir: working_dir,
+            _env: env,
         })
+    }
+}
+
+struct RetainedCStringArray {
+    _values: Vec<CString>,
+    pointers: Vec<wslc_sys::PCSTR>,
+}
+
+impl RetainedCStringArray {
+    fn new(values: Vec<CString>) -> Self {
+        let pointers = values.iter().map(|value| value.as_ptr()).collect();
+        Self {
+            _values: values,
+            pointers,
+        }
+    }
+
+    fn pointers(&self) -> &[wslc_sys::PCSTR] {
+        &self.pointers
     }
 }
 
 pub(crate) struct RawProcessSettings {
     pub settings: wslc_sys::WslcProcessSettings,
-    _argv: Vec<CString>,
-    _env: Vec<CString>,
+    _argv: RetainedCStringArray,
+    _working_dir: Option<CString>,
+    _env: RetainedCStringArray,
 }
 
 /// Process output.
@@ -331,5 +359,18 @@ mod tests {
             .capture_stdout()
             .inherit_output()
             .captures_output());
+    }
+
+    #[test]
+    fn retained_cstring_array_keeps_values_and_pointer_storage_alive() {
+        let array = RetainedCStringArray::new(vec![
+            CString::new("first").unwrap(),
+            CString::new("second=value").unwrap(),
+        ]);
+
+        assert_eq!(array._values.len(), 2);
+        assert_eq!(array.pointers().len(), 2);
+        assert_eq!(array.pointers()[0], array._values[0].as_ptr());
+        assert_eq!(array.pointers()[1], array._values[1].as_ptr());
     }
 }
