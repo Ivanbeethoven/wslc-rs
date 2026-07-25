@@ -289,7 +289,7 @@ pub const WSLC_CONTAINER_FLAG_AUTO_REMOVE: WslcContainerFlags = 0x0000_0001;
 /// Enable GPU for the container.
 pub const WSLC_CONTAINER_FLAG_ENABLE_GPU: WslcContainerFlags = 0x0000_0002;
 /// Run the container as privileged.
-pub const WSLC_CONTAINER_FLAG_PRIVILEGED: WslcContainerFlags = 0x0000_0080;
+pub const WSLC_CONTAINER_FLAG_PRIVILEGED: WslcContainerFlags = 0x0000_0004;
 
 /// Container start flags.
 pub type WslcContainerStartFlags = u32;
@@ -878,5 +878,10 @@ mod tests {
     fn image_info_layout_is_stable() {
         assert_eq!(core::mem::size_of::<WslcImageInfo>(), 304);
         assert_eq!(core::mem::align_of::<WslcImageInfo>(), 8);
+    }
+
+    #[test]
+    fn privileged_flag_matches_the_public_sdk_abi() {
+        assert_eq!(WSLC_CONTAINER_FLAG_PRIVILEGED, 0x0000_0004);
     }
 }
