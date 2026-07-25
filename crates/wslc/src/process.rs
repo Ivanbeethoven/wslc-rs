@@ -230,6 +230,7 @@ impl From<wslc_sys::WslcProcessState> for ProcessState {
 
 pub(crate) struct ProcessInner {
     pub raw: wslc_sys::WslcProcess,
+    pub capture: Option<Rc<CaptureRegistration>>,
 }
 
 /// A process running inside a WSLC container.
@@ -287,9 +288,17 @@ impl Process {
 
     /// Waits for the process and returns captured output.
     pub fn wait_with_output(&self) -> Result<Output> {
+        self.wait()?;
+        let captured = self
+            .inner
+            .capture
+            .as_ref()
+            .map(|c| c.wait_output())
+            .unwrap_or_default();
         Ok(Output {
-            status: self.wait()?,
-            ..Output::default()
+            status: captured.status,
+            stdout: captured.stdout,
+            stderr: captured.stderr,
         })
     }
 }

@@ -498,7 +498,8 @@ impl Container {
     /// Creates an additional process in the container.
     pub fn exec(&self, options: ProcessOptions) -> Result<Process> {
         let sdk = raw::sdk()?;
-        let mut process_settings = options.to_raw(sdk, None)?;
+        let capture = if options.captures_output() { Some(CaptureRegistration::new()) } else { None };
+        let mut process_settings = options.to_raw(sdk, capture.as_ref())?;
         let raw_process = raw::map_result(
             sdk.create_container_process(self.raw(), &mut process_settings.settings),
         )?;
@@ -509,7 +510,10 @@ impl Container {
             )
         })?;
         Ok(Process {
-            inner: Rc::new(ProcessInner { raw: raw.as_ptr() }),
+            inner: Rc::new(ProcessInner {
+                raw: raw.as_ptr(),
+                capture: capture.map(Rc::new),
+            }),
         })
     }
 
