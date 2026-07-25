@@ -245,6 +245,20 @@ impl ContainerBuilder {
         self
     }
 
+    /// Adds a read-only volume mount.
+    pub fn volume_read_only(
+        mut self,
+        windows_path: impl Into<PathBuf>,
+        container_path: impl Into<String>,
+    ) -> Self {
+        self.volumes.push(VolumeMount {
+            windows_path: windows_path.into(),
+            container_path: container_path.into(),
+            read_only: true,
+        });
+        self
+    }
+
     fn validate(&self) -> Result<()> {
         self.options.validate()?;
         for port in &self.ports {
@@ -276,7 +290,7 @@ impl ContainerBuilder {
     pub fn create(self) -> Result<Container> {
         self.validate()?;
         let sdk = raw::sdk()?;
-        let resolved_image = registry::resolve_image_reference(&self.options.image)?;
+        let resolved_image = if self.options.image.contains('/') { registry::resolve_image_reference(&self.options.image)? } else { self.options.image.clone() };
         let image = strings::cstring(&resolved_image, "image")?;
         let mut settings = wslc_sys::WslcContainerSettings::default();
         raw::map_result(sdk.init_container_settings(image.as_ptr(), &mut settings))?;
