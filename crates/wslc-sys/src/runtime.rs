@@ -235,7 +235,8 @@ pub struct Sdk {
 
 impl Sdk {
     fn load() -> Result<Self> {
-        let dll_path = std::env::var_os("WSLC_SDK_PATH").unwrap_or_else(|| std::ffi::OsString::from("wslcsdk.dll"));
+        let dll_path = std::env::var_os("WSLC_SDK_PATH")
+            .unwrap_or_else(|| std::ffi::OsString::from("wslcsdk.dll"));
         let library = Library::load(OsStr::new(&dll_path))?;
         macro_rules! sym {
             ($field:ident) => {

@@ -290,7 +290,11 @@ impl ContainerBuilder {
     pub fn create(self) -> Result<Container> {
         self.validate()?;
         let sdk = raw::sdk()?;
-        let resolved_image = if self.options.image.contains('/') { registry::resolve_image_reference(&self.options.image)? } else { self.options.image.clone() };
+        let resolved_image = if self.options.image.contains('/') {
+            registry::resolve_image_reference(&self.options.image)?
+        } else {
+            self.options.image.clone()
+        };
         let image = strings::cstring(&resolved_image, "image")?;
         let mut settings = wslc_sys::WslcContainerSettings::default();
         raw::map_result(sdk.init_container_settings(image.as_ptr(), &mut settings))?;
@@ -498,7 +502,11 @@ impl Container {
     /// Creates an additional process in the container.
     pub fn exec(&self, options: ProcessOptions) -> Result<Process> {
         let sdk = raw::sdk()?;
-        let capture = if options.captures_output() { Some(CaptureRegistration::new()) } else { None };
+        let capture = if options.captures_output() {
+            Some(CaptureRegistration::new())
+        } else {
+            None
+        };
         let mut process_settings = options.to_raw(sdk, capture.as_ref())?;
         let raw_process = raw::map_result(
             sdk.create_container_process(self.raw(), &mut process_settings.settings),
