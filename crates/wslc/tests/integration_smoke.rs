@@ -21,7 +21,10 @@ fn unique_name(prefix: &str) -> String {
 }
 
 fn storage_path(name: &str) -> PathBuf {
-    PathBuf::from(format!(r"C:\WslcData\{name}"))
+    std::env::var_os("WSLC_TEST_STORAGE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\WslcData"))
+        .join(name)
 }
 
 fn start_session(prefix: &str) -> Session {
@@ -78,6 +81,22 @@ fn empty_session_can_list_images() {
         "fresh session should not inherit images from another integration run: {images:?}"
     );
 
+    session.terminate().expect("session should terminate");
+}
+
+#[test]
+fn custom_session_vhd_on_configured_storage_root_can_list_images() {
+    Service::ensure_available().expect("WSLC service should be available for integration tests");
+
+    let name = unique_name("wslc-rs-session-vhd");
+    let session = Session::builder(&name, storage_path(&name))
+        .vhd(VhdOptions::new("storage", 64 * 1024 * 1024 * 1024))
+        .terminate_on_drop(true)
+        .start()
+        .expect("session with a custom VHD should start");
+    session
+        .list_images()
+        .expect("session with a custom VHD should list images");
     session.terminate().expect("session should terminate");
 }
 
