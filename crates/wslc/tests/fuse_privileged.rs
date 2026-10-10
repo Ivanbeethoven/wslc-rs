@@ -73,6 +73,7 @@ echo "=== DONE ==="
             working_dir: None,
             env: Vec::new(),
             output_mode: wslc::OutputMode::Capture,
+            enable_stdin: false,
         })
         .create()
         .expect("should create privileged container")

@@ -368,6 +368,26 @@ pub enum WslcProcessIOHandle {
     WSLC_PROCESS_IO_HANDLE_STDERR = 2,
 }
 
+/// Process flags.
+pub type WslcProcessFlags = u32;
+/// No process flags.
+pub const WSLC_PROCESS_FLAG_NONE: WslcProcessFlags = 0x0000_0000;
+/// Enable standard input for the process.
+pub const WSLC_PROCESS_FLAG_STDIN: WslcProcessFlags = 0x0000_0001;
+
+/// Registry identity token type returned by `WslcSessionAuthenticate`.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum WslcIdentityTokenType {
+    /// Unknown or failure.
+    #[default]
+    WSLC_IDENTITY_TOKEN_TYPE_UNKNOWN = 0,
+    /// Server returned an identity token.
+    WSLC_IDENTITY_TOKEN_TYPE_TOKEN = 1,
+    /// Username/password credentials were embedded.
+    WSLC_IDENTITY_TOKEN_TYPE_CREDENTIALS = 2,
+}
+
 /// STDIO callback.
 pub type WslcStdIOCallback = Option<
     unsafe extern "system" fn(
@@ -744,9 +764,20 @@ pub type WslcSetProcessSettingsEnvVariablesFn = unsafe extern "system" fn(
     key_value: *const PCSTR,
     argc: usize,
 ) -> HRESULT;
+/// `WslcSetProcessSettingsFlags`.
+pub type WslcSetProcessSettingsFlagsFn = unsafe extern "system" fn(
+    processSettings: *mut WslcProcessSettings,
+    flags: WslcProcessFlags,
+) -> HRESULT;
 /// `WslcSetProcessSettingsCallbacks`.
 pub type WslcSetProcessSettingsCallbacksFn = unsafe extern "system" fn(
     processSettings: *mut WslcProcessSettings,
+    callbacks: *const WslcProcessCallbacks,
+    context: PVOID,
+) -> HRESULT;
+/// `WslcSetContainerInitProcessIOCallbacks`.
+pub type WslcSetContainerInitProcessIOCallbacksFn = unsafe extern "system" fn(
+    container: WslcContainer,
     callbacks: *const WslcProcessCallbacks,
     context: PVOID,
 ) -> HRESULT;
@@ -803,12 +834,14 @@ pub type WslcLoadSessionImageFn = unsafe extern "system" fn(
     imageContent: HANDLE,
     imageContentBytes: u64,
     options: *const WslcLoadImageOptions,
+    errorMessage: *mut PWSTR,
 ) -> HRESULT;
 /// `WslcLoadSessionImageFromFile`.
 pub type WslcLoadSessionImageFromFileFn = unsafe extern "system" fn(
     session: WslcSession,
     path: PCWSTR,
     options: *const WslcLoadImageOptions,
+    errorMessage: *mut PWSTR,
 ) -> HRESULT;
 /// `WslcDeleteSessionImage`.
 pub type WslcDeleteSessionImageFn = unsafe extern "system" fn(
@@ -835,6 +868,7 @@ pub type WslcSessionAuthenticateFn = unsafe extern "system" fn(
     username: PCSTR,
     password: PCSTR,
     identityToken: *mut PSTR,
+    tokenType: *mut WslcIdentityTokenType,
     errorMessage: *mut PWSTR,
 ) -> HRESULT;
 /// `WslcListSessionImages`.
@@ -919,5 +953,11 @@ mod tests {
             WSLC_LOGS_FLAGS_VALID,
             WSLC_LOGS_FLAG_FOLLOW | WSLC_LOGS_FLAG_TIMESTAMPS | WSLC_LOGS_FLAG_DETAILS
         );
+    }
+
+    #[test]
+    fn process_flags_match_public_sdk_abi() {
+        assert_eq!(WSLC_PROCESS_FLAG_NONE, 0);
+        assert_eq!(WSLC_PROCESS_FLAG_STDIN, 1);
     }
 }

@@ -1,13 +1,46 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
 use crate::container::{Container, ContainerBuilder, ContainerOptions};
-use crate::image::{ImageInfo, ImagePullOperation, ImagePullOptions};
+use crate::image::{
+    self, AuthenticateResult, IdentityTokenType, ImageInfo, ImagePullOperation, ImagePullOptions,
+    ImagePushOptions,
+};
 use crate::logs::{self, ContainerLogs, LogsOptions};
 use crate::storage::VhdOptions;
 use crate::{com, raw, strings, Error, Result};
+
+/// Session termination reason.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionTerminationReason {
+    /// Unknown reason.
+    Unknown,
+    /// Session was shut down.
+    Shutdown,
+    /// Session crashed.
+    Crashed,
+}
+
+impl From<wslc_sys::WslcSessionTerminationReason> for SessionTerminationReason {
+    fn from(value: wslc_sys::WslcSessionTerminationReason) -> Self {
+        match value {
+            wslc_sys::WslcSessionTerminationReason::WSLC_SESSION_TERMINATION_REASON_SHUTDOWN => {
+                Self::Shutdown
+            }
+            wslc_sys::WslcSessionTerminationReason::WSLC_SESSION_TERMINATION_REASON_CRASHED => {
+                Self::Crashed
+            }
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// Crash dump information delivered by a session subscription.
+pub type CrashDumpInfo = wslc_sys::runtime::CrashDumpInfo;
+/// Owns a crash dump callback subscription.
+pub type CrashDumpSubscription = wslc_sys::runtime::CrashDumpRegistration;
 
 /// WSLC session handle.
 #[derive(Clone)]
@@ -109,6 +142,117 @@ impl Session {
             tag: tag.as_ptr(),
         };
         raw::map_result(sdk.tag_session_image(self.raw(), &options))
+    }
+
+    /// Imports an image from a local archive file.
+    pub fn import_image_from_file(
+        &self,
+        image_name: impl AsRef<str>,
+        path: impl AsRef<Path>,
+    ) -> Result<()> {
+        let image_name = image_name.as_ref();
+        let path = path.as_ref();
+        if image_name.trim().is_empty() {
+            return Err(Error::InvalidInput("image name cannot be empty".to_owned()));
+        }
+        if image_name.contains('\0') {
+            return Err(Error::Nul("image name".to_owned()));
+        }
+        image::validate_image_path(path, "image path")?;
+        let sdk = raw::sdk()?;
+        let image_name = strings::cstring(image_name, "image name")?;
+        let path = strings::wide_path(path);
+        raw::map_result(sdk.import_session_image_from_file(
+            self.raw(),
+            image_name.as_ptr(),
+            path.as_ptr(),
+        ))
+    }
+
+    /// Loads an image archive from a local file.
+    pub fn load_image_from_file(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        image::validate_image_path(path, "image path")?;
+        let sdk = raw::sdk()?;
+        let path = strings::wide_path(path);
+        raw::map_result(sdk.load_session_image_from_file(self.raw(), path.as_ptr()))
+    }
+
+    /// Pushes an image to a registry.
+    pub fn push_image(&self, options: ImagePushOptions) -> Result<()> {
+        options.validate()?;
+        let sdk = raw::sdk()?;
+        let image = strings::cstring(&options.image, "image")?;
+        let registry_auth;
+        let registry_auth_ptr = if let Some(auth) = &options.registry_auth {
+            registry_auth = strings::cstring(auth, "registry_auth")?;
+            registry_auth.as_ptr()
+        } else {
+            std::ptr::null()
+        };
+        raw::map_result(sdk.push_session_image(self.raw(), image.as_ptr(), registry_auth_ptr))
+    }
+
+    /// Authenticates with a container registry.
+    pub fn authenticate(
+        &self,
+        server_address: impl AsRef<str>,
+        username: impl AsRef<str>,
+        password: impl AsRef<str>,
+    ) -> Result<AuthenticateResult> {
+        let server_address = server_address.as_ref();
+        let username = username.as_ref();
+        let password = password.as_ref();
+        if server_address.trim().is_empty() {
+            return Err(Error::InvalidInput(
+                "server address cannot be empty".to_owned(),
+            ));
+        }
+        if server_address.contains('\0') {
+            return Err(Error::Nul("server address".to_owned()));
+        }
+        if username.contains('\0') {
+            return Err(Error::Nul("username".to_owned()));
+        }
+        if password.contains('\0') {
+            return Err(Error::Nul("password".to_owned()));
+        }
+        let sdk = raw::sdk()?;
+        let server_address = strings::cstring(server_address, "server address")?;
+        let username = strings::cstring(username, "username")?;
+        let password = strings::cstring(password, "password")?;
+        let (identity_token, token_type) = raw::map_result(sdk.session_authenticate(
+            self.raw(),
+            server_address.as_ptr(),
+            username.as_ptr(),
+            password.as_ptr(),
+        ))?;
+        Ok(AuthenticateResult {
+            identity_token,
+            token_type: IdentityTokenType::from(token_type),
+        })
+    }
+
+    /// Returns the session termination waitable event handle.
+    pub fn termination_event(&self) -> Result<wslc_sys::HANDLE> {
+        let sdk = raw::sdk()?;
+        raw::map_result(sdk.session_termination_event(self.raw()))
+    }
+
+    /// Returns the session termination reason.
+    pub fn termination_reason(&self) -> Result<SessionTerminationReason> {
+        let sdk = raw::sdk()?;
+        let reason = raw::map_result(sdk.session_termination_reason(self.raw()))?;
+        Ok(reason.into())
+    }
+
+    /// Registers a crash dump callback for this session.
+    pub fn on_crash_dump<F>(&self, callback: F) -> Result<CrashDumpSubscription>
+    where
+        F: FnMut(CrashDumpInfo) + Send + 'static,
+    {
+        let sdk = raw::sdk()?;
+        raw::map_result(sdk.register_session_crash_dump_callback(self.raw(), callback))
     }
 
     /// Creates a container builder.

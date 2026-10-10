@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use wslc::{
     ComponentFlags, ContainerOptions, ContainerState, DeleteContainerOptions, Error,
-    ImageProgressStatus, ImagePullOptions, LogsOptions, NetworkingMode, ProcessOptions,
-    ProcessState, Service, Session, Signal, Version, VhdOptions, VhdType, WslcErrorKind,
+    ImageProgressStatus, ImagePullOptions, ImagePushOptions, LogsOptions, NetworkingMode,
+    ProcessOptions, ProcessState, Service, Session, Signal, Version, VhdOptions, VhdType,
+    WslcErrorKind,
 };
 
 #[test]
@@ -74,6 +75,19 @@ fn container_options_reject_empty_and_nul_image_names() {
 #[test]
 fn delete_container_options_default_is_not_forceful() {
     assert!(!DeleteContainerOptions::default().force);
+}
+
+#[test]
+fn image_push_options_validate_before_loading_sdk() {
+    let err = ImagePushOptions::new("").validate().unwrap_err();
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("image")));
+
+    let err = ImagePushOptions::new("alpine\0x").validate().unwrap_err();
+    assert!(matches!(err, Error::Nul(field) if field == "image"));
+
+    let options = ImagePushOptions::new("alpine:latest").registry_auth("token");
+    assert_eq!(options.image, "alpine:latest");
+    assert_eq!(options.registry_auth.as_deref(), Some("token"));
 }
 
 #[test]

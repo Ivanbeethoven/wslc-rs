@@ -24,10 +24,15 @@ pub use container::{
 pub use error::WslcErrorKind;
 pub use error::{Error, Result};
 pub use image::{
-    ImageInfo, ImageProgress, ImageProgressStatus, ImagePullOperation, ImagePullOptions,
+    AuthenticateResult, IdentityTokenType, ImageInfo, ImageProgress, ImageProgressStatus,
+    ImagePullOperation, ImagePullOptions, ImagePushOptions,
 };
 pub use logs::{ContainerLogs, LogsOptions};
-pub use process::{Output, OutputMode, Process, ProcessOptions, ProcessState};
+pub use process::{
+    CaptureRegistration, Output, OutputMode, Process, ProcessIo, ProcessOptions, ProcessState,
+};
 pub use service::{ComponentFlags, InstallProgress, Service, Version};
-pub use session::{Session, SessionBuilder};
+pub use session::{
+    CrashDumpInfo, CrashDumpSubscription, Session, SessionBuilder, SessionTerminationReason,
+};
 pub use storage::{VhdOptions, VhdType};

@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::{raw, registry, strings, Error, Result, Session};
 
 /// Options for pulling an image.
@@ -152,6 +154,81 @@ impl From<wslc_sys::WslcImageProgressStatus> for ImageProgressStatus {
     }
 }
 
+/// Options for pushing an image.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImagePushOptions {
+    /// Image name or ID.
+    pub image: String,
+    /// Optional registry auth token.
+    pub registry_auth: Option<String>,
+}
+
+impl ImagePushOptions {
+    /// Creates push options.
+    pub fn new(image: impl Into<String>) -> Self {
+        Self {
+            image: image.into(),
+            registry_auth: None,
+        }
+    }
+
+    /// Sets a registry auth token.
+    pub fn registry_auth(mut self, registry_auth: impl Into<String>) -> Self {
+        self.registry_auth = Some(registry_auth.into());
+        self
+    }
+
+    /// Validates the options.
+    pub fn validate(&self) -> Result<()> {
+        if self.image.trim().is_empty() {
+            return Err(Error::InvalidInput("image name cannot be empty".to_owned()));
+        }
+        if self.image.contains('\0') {
+            return Err(Error::Nul("image".to_owned()));
+        }
+        if self
+            .registry_auth
+            .as_ref()
+            .is_some_and(|value| value.contains('\0'))
+        {
+            return Err(Error::Nul("registry_auth".to_owned()));
+        }
+        Ok(())
+    }
+}
+
+/// Registry authentication result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthenticateResult {
+    /// Base64-encoded identity token suitable for pull/push `registry_auth`.
+    pub identity_token: String,
+    /// Token embedding kind.
+    pub token_type: IdentityTokenType,
+}
+
+/// Kind of credential embedded in an authenticate result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityTokenType {
+    /// Unknown or failure.
+    Unknown,
+    /// Server returned an identity token.
+    Token,
+    /// Username/password credentials were embedded.
+    Credentials,
+}
+
+impl From<wslc_sys::WslcIdentityTokenType> for IdentityTokenType {
+    fn from(value: wslc_sys::WslcIdentityTokenType) -> Self {
+        match value {
+            wslc_sys::WslcIdentityTokenType::WSLC_IDENTITY_TOKEN_TYPE_TOKEN => Self::Token,
+            wslc_sys::WslcIdentityTokenType::WSLC_IDENTITY_TOKEN_TYPE_CREDENTIALS => {
+                Self::Credentials
+            }
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// Image metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImageInfo {
@@ -163,6 +240,14 @@ pub struct ImageInfo {
     pub size_bytes: i64,
     /// Creation time as Unix timestamp.
     pub created_unix_time: u64,
+}
+
+/// Validates a local image archive path argument.
+pub(crate) fn validate_image_path(path: &Path, field: &str) -> Result<()> {
+    if path.as_os_str().is_empty() {
+        return Err(Error::InvalidInput(format!("{field} cannot be empty")));
+    }
+    Ok(())
 }
 
 impl TryFrom<wslc_sys::WslcImageInfo> for ImageInfo {

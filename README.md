@@ -158,10 +158,11 @@ Implemented in `0.1.x`:
 - service availability/version checks;
 - session builder and lifecycle;
 - image pull with progress callback;
-- container builder, open-by-name/id, start, attached start, stop, delete, inspect, state;
+- container builder, open-by-name/id, start, attached start, stop, delete, inspect, state, init-process getter, named volumes;
 - container logs helper (`LogsOptions` / `Container::logs` / `Session::logs`) via `wslc` CLI fallback while the C SDK lacks a logs export;
-- process options, basic callbacks, exit waiting, and output capture;
-- image list/delete/tag and VHD volume create/delete;
+- process options including stdin flags, IO handle access, callbacks, exit waiting, and output capture;
+- image list/delete/tag/import/load/push, registry authenticate, and VHD volume create/delete;
+- session termination event/reason and crash dump subscriptions;
 - explicit COM initialization helper.
 
 Deferred:

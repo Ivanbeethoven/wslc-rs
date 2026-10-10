@@ -62,6 +62,10 @@ impl Session {
     pub fn list_images(&self) -> Result<Vec<ImageInfo>>;
     pub fn delete_image(&self, name_or_id: impl AsRef<str>) -> Result<()>;
     pub fn tag_image(&self, image: impl AsRef<str>, repo: impl AsRef<str>, tag: impl AsRef<str>) -> Result<()>;
+    pub fn import_image_from_file(&self, image_name: impl AsRef<str>, path: impl AsRef<Path>) -> Result<()>;
+    pub fn load_image_from_file(&self, path: impl AsRef<Path>) -> Result<()>;
+    pub fn push_image(&self, options: ImagePushOptions) -> Result<()>;
+    pub fn authenticate(&self, server: impl AsRef<str>, user: impl AsRef<str>, pass: impl AsRef<str>) -> Result<AuthenticateResult>;
 
     pub fn container(&self, options: ContainerOptions) -> ContainerBuilder;
     pub fn open_container(&self, name_or_id: impl AsRef<str>) -> Result<Container>;
@@ -69,6 +73,12 @@ impl Session {
 
     pub fn create_vhd_volume(&self, options: VhdOptions) -> Result<()>;
     pub fn delete_vhd_volume(&self, name: impl AsRef<str>) -> Result<()>;
+
+    pub fn termination_event(&self) -> Result<HANDLE>;
+    pub fn termination_reason(&self) -> Result<SessionTerminationReason>;
+    pub fn on_crash_dump<F>(&self, callback: F) -> Result<CrashDumpSubscription>
+    where
+        F: FnMut(CrashDumpInfo) + Send + 'static;
 
     pub fn terminate(&self) -> Result<()>;
 }
