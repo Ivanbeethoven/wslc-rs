@@ -2,6 +2,7 @@
 
 mod container;
 mod image;
+mod logs;
 mod process;
 mod raw;
 mod registry;
@@ -25,6 +26,7 @@ pub use error::{Error, Result};
 pub use image::{
     ImageInfo, ImageProgress, ImageProgressStatus, ImagePullOperation, ImagePullOptions,
 };
+pub use logs::{ContainerLogs, LogsOptions};
 pub use process::{Output, OutputMode, Process, ProcessOptions, ProcessState};
 pub use service::{ComponentFlags, InstallProgress, Service, Version};
 pub use session::{Session, SessionBuilder};

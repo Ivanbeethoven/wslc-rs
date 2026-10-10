@@ -3,8 +3,9 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::container::{ContainerBuilder, ContainerOptions};
+use crate::container::{Container, ContainerBuilder, ContainerOptions};
 use crate::image::{ImageInfo, ImagePullOperation, ImagePullOptions};
+use crate::logs::{self, ContainerLogs, LogsOptions};
 use crate::storage::VhdOptions;
 use crate::{com, raw, strings, Error, Result};
 
@@ -22,6 +23,7 @@ impl std::fmt::Debug for Session {
 
 pub(crate) struct SessionInner {
     pub raw: NonNull<std::ffi::c_void>,
+    pub name: String,
     terminate_on_drop: bool,
     _com: Option<com::ComGuard>,
 }
@@ -43,6 +45,11 @@ impl Session {
 
     pub(crate) fn raw(&self) -> wslc_sys::WslcSession {
         self.inner.raw.as_ptr()
+    }
+
+    /// Returns the session display name used when the session was created.
+    pub fn name(&self) -> &str {
+        &self.inner.name
     }
 
     /// Starts an image pull operation.
@@ -107,6 +114,43 @@ impl Session {
     /// Creates a container builder.
     pub fn container(&self, options: ContainerOptions) -> ContainerBuilder {
         ContainerBuilder::new(self.clone(), options)
+    }
+
+    /// Opens an existing container by name, full ID, or unambiguous ID prefix.
+    pub fn open_container(&self, name_or_id: impl AsRef<str>) -> Result<Container> {
+        let name_or_id = name_or_id.as_ref();
+        if name_or_id.trim().is_empty() {
+            return Err(Error::InvalidInput(
+                "container name or id cannot be empty".to_owned(),
+            ));
+        }
+        if name_or_id.contains('\0') {
+            return Err(Error::Nul("container name or id".to_owned()));
+        }
+
+        let sdk = raw::sdk()?;
+        let name_or_id = strings::cstring(name_or_id, "container name or id")?;
+        let raw_container = raw::map_result(sdk.open_container(self.raw(), name_or_id.as_ptr()))?;
+        let raw = NonNull::new(raw_container).ok_or_else(|| {
+            Error::from_hresult(
+                wslc_sys::S_OK,
+                "WslcOpenContainer returned a null container",
+            )
+        })?;
+        Ok(Container::from_opened(raw, self.inner.clone()))
+    }
+
+    /// Fetches logs for a container in this session.
+    ///
+    /// The public C SDK does not yet expose container logs, so this helper uses
+    /// the `wslc container logs` CLI. Override the executable with `WSLC_CLI_PATH`
+    /// when needed.
+    pub fn logs(
+        &self,
+        container_id: impl AsRef<str>,
+        options: LogsOptions,
+    ) -> Result<ContainerLogs> {
+        logs::fetch_container_logs(self.name(), container_id.as_ref(), &options)
     }
 
     /// Creates a VHD-backed volume.
@@ -290,6 +334,7 @@ impl SessionBuilder {
         Ok(Session {
             inner: Rc::new(SessionInner {
                 raw,
+                name: self.name,
                 terminate_on_drop: self.terminate_on_drop,
                 _com: com,
             }),

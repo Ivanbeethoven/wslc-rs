@@ -152,13 +152,14 @@ $env:PATH="$msvc\bin\Hostx64\x64;$env:PATH"
 
 ## Status
 
-Implemented in `0.1.0`:
+Implemented in `0.1.x`:
 
 - raw ABI types, runtime FFI boundary, and layout tests;
 - service availability/version checks;
 - session builder and lifecycle;
 - image pull with progress callback;
-- container builder, start, attached start, stop, delete, inspect, state;
+- container builder, open-by-name/id, start, attached start, stop, delete, inspect, state;
+- container logs helper (`LogsOptions` / `Container::logs` / `Session::logs`) via `wslc` CLI fallback while the C SDK lacks a logs export;
 - process options, basic callbacks, exit waiting, and output capture;
 - image list/delete/tag and VHD volume create/delete;
 - explicit COM initialization helper.
@@ -167,6 +168,7 @@ Deferred:
 
 - async runtime integration;
 - stdin streaming;
+- native C SDK logs binding once Microsoft exports it;
 - richer registry authentication helpers;
 - crash dump subscriptions;
 - stable thread-safety guarantees for handles;

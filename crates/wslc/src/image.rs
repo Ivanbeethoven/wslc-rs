@@ -50,7 +50,7 @@ pub struct ImagePullOperation<'a> {
     pub(crate) progress: Option<Box<dyn FnMut(ImageProgress) + Send>>,
 }
 
-impl<'a> ImagePullOperation<'a> {
+impl ImagePullOperation<'_> {
     /// Registers a progress callback.
     pub fn on_progress<F>(mut self, f: F) -> Self
     where

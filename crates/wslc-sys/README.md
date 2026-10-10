@@ -14,3 +14,7 @@ Policy:
 
 This crate includes layout tests for the opaque settings blobs and image info
 struct, plus the low-level runtime boundary used by `wslc`.
+
+It also mirrors `WSLCLogsFlags` bit values from the WSLC shared IDL so safe
+wrappers can share the same flag constants even though the public C header does
+not yet export a logs entry point.

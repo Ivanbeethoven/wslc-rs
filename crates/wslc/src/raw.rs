@@ -8,6 +8,7 @@ pub(crate) fn sdk() -> Result<&'static Sdk> {
     runtime::sdk().map_err(map_error)
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn co_initialize_ex(reserved: *mut std::ffi::c_void, coinit: u32) -> wslc_sys::HRESULT {
     runtime::co_initialize_ex(reserved, coinit)
 }

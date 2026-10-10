@@ -298,6 +298,23 @@ pub const WSLC_CONTAINER_START_FLAG_NONE: WslcContainerStartFlags = 0;
 /// Attach to the init process.
 pub const WSLC_CONTAINER_START_FLAG_ATTACH: WslcContainerStartFlags = 0x0000_0001;
 
+/// Container logs flags from the WSLC shared IDL (`WSLCLogsFlags`).
+///
+/// The public C SDK header does not yet expose a logs entry point; these flags
+/// mirror the service/CLI surface so safe wrappers can share the same bit values.
+pub type WslcLogsFlags = u32;
+/// No logs flags.
+pub const WSLC_LOGS_FLAG_NONE: WslcLogsFlags = 0;
+/// Follow log output.
+pub const WSLC_LOGS_FLAG_FOLLOW: WslcLogsFlags = 0x0000_0001;
+/// Include timestamps in log output.
+pub const WSLC_LOGS_FLAG_TIMESTAMPS: WslcLogsFlags = 0x0000_0002;
+/// Include extra log details.
+pub const WSLC_LOGS_FLAG_DETAILS: WslcLogsFlags = 0x0000_0004;
+/// Valid combination mask for logs flags.
+pub const WSLC_LOGS_FLAGS_VALID: WslcLogsFlags =
+    WSLC_LOGS_FLAG_FOLLOW | WSLC_LOGS_FLAG_TIMESTAMPS | WSLC_LOGS_FLAG_DETAILS;
+
 /// Container state.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -611,6 +628,13 @@ pub type WslcCreateContainerFn = unsafe extern "system" fn(
     container: *mut WslcContainer,
     errorMessage: *mut PWSTR,
 ) -> HRESULT;
+/// `WslcOpenContainer`.
+pub type WslcOpenContainerFn = unsafe extern "system" fn(
+    session: WslcSession,
+    nameOrId: PCSTR,
+    container: *mut WslcContainer,
+    errorMessage: *mut PWSTR,
+) -> HRESULT;
 /// `WslcStartContainer`.
 pub type WslcStartContainerFn = unsafe extern "system" fn(
     container: WslcContainer,
@@ -883,5 +907,17 @@ mod tests {
     #[test]
     fn privileged_flag_matches_the_public_sdk_abi() {
         assert_eq!(WSLC_CONTAINER_FLAG_PRIVILEGED, 0x0000_0004);
+    }
+
+    #[test]
+    fn logs_flags_match_shared_idl_bits() {
+        assert_eq!(WSLC_LOGS_FLAG_NONE, 0);
+        assert_eq!(WSLC_LOGS_FLAG_FOLLOW, 1);
+        assert_eq!(WSLC_LOGS_FLAG_TIMESTAMPS, 2);
+        assert_eq!(WSLC_LOGS_FLAG_DETAILS, 4);
+        assert_eq!(
+            WSLC_LOGS_FLAGS_VALID,
+            WSLC_LOGS_FLAG_FOLLOW | WSLC_LOGS_FLAG_TIMESTAMPS | WSLC_LOGS_FLAG_DETAILS
+        );
     }
 }

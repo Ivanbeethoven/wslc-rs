@@ -24,6 +24,15 @@ pub enum Error {
     Io(std::io::Error),
     /// UTF-8 conversion error.
     Utf8(std::string::FromUtf8Error),
+    /// An external helper program (for example `wslc.exe`) was not found.
+    CommandNotFound(String),
+    /// An external helper program exited unsuccessfully.
+    CommandFailed {
+        /// Process exit code when available.
+        status: Option<i32>,
+        /// Human-readable failure details.
+        message: String,
+    },
 }
 
 impl Error {
@@ -92,6 +101,11 @@ impl fmt::Display for Error {
             Self::Nul(field) => write!(f, "string contains interior NUL: {field}"),
             Self::Io(error) => write!(f, "I/O error: {error}"),
             Self::Utf8(error) => write!(f, "UTF-8 conversion error: {error}"),
+            Self::CommandNotFound(message) => write!(f, "command not found: {message}"),
+            Self::CommandFailed { status, message } => match status {
+                Some(code) => write!(f, "command failed (exit {code}): {message}"),
+                None => write!(f, "command failed: {message}"),
+            },
         }
     }
 }

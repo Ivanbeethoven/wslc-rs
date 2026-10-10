@@ -126,6 +126,7 @@ impl Default for CaptureRegistration {
 }
 
 struct Library {
+    #[cfg_attr(not(windows), allow(dead_code))]
     handle: NonNull<c_void>,
 }
 
@@ -164,6 +165,14 @@ impl Library {
 
         Ok(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&ptr) })
     }
+
+    #[cfg(not(windows))]
+    unsafe fn get<T: Copy>(&self, _symbol: &'static [u8]) -> Result<T> {
+        let _ = self;
+        Err(Error::UnsupportedPlatform(
+            "WSLC requires a Windows host target",
+        ))
+    }
 }
 
 unsafe impl Send for Library {}
@@ -193,6 +202,7 @@ pub struct Sdk {
     WslcReleaseSession: WslcReleaseSessionFn,
     WslcInitContainerSettings: WslcInitContainerSettingsFn,
     WslcCreateContainer: WslcCreateContainerFn,
+    WslcOpenContainer: WslcOpenContainerFn,
     WslcStartContainer: WslcStartContainerFn,
     WslcSetContainerSettingsName: WslcSetContainerSettingsNameFn,
     WslcSetContainerSettingsInitProcess: WslcSetContainerSettingsInitProcessFn,
@@ -256,6 +266,7 @@ impl Sdk {
             WslcReleaseSession: sym!(WslcReleaseSession),
             WslcInitContainerSettings: sym!(WslcInitContainerSettings),
             WslcCreateContainer: sym!(WslcCreateContainer),
+            WslcOpenContainer: sym!(WslcOpenContainer),
             WslcStartContainer: sym!(WslcStartContainer),
             WslcSetContainerSettingsName: sym!(WslcSetContainerSettingsName),
             WslcSetContainerSettingsInitProcess: sym!(WslcSetContainerSettingsInitProcess),
@@ -612,6 +623,17 @@ impl Sdk {
         Ok(container)
     }
 
+    /// Opens an existing container by name, full ID, or unambiguous ID prefix.
+    pub fn open_container(&self, session: WslcSession, name_or_id: PCSTR) -> Result<WslcContainer> {
+        let mut container = std::ptr::null_mut();
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcOpenContainer)(session, name_or_id, &mut container, &mut error_message)
+        };
+        check_hr(hr, error_message)?;
+        Ok(container)
+    }
+
     /// Releases a container handle.
     pub fn release_container(&self, container: WslcContainer) -> Result<()> {
         let hr = unsafe { (self.WslcReleaseContainer)(container) };
@@ -921,15 +943,6 @@ fn wide_os(value: &OsStr) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
 
     value.encode_wide().chain(std::iter::once(0)).collect()
-}
-
-#[cfg(not(windows))]
-fn wide_os(value: &OsStr) -> Vec<u16> {
-    value
-        .to_string_lossy()
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect()
 }
 
 unsafe extern "system" fn install_trampoline<F>(

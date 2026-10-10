@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::logs::{self, ContainerLogs, LogsOptions};
 use crate::process::{CaptureRegistration, Output, Process, ProcessInner, ProcessOptions};
 use crate::{raw, registry, strings, Error, Result, Session};
 
@@ -431,7 +432,6 @@ impl From<wslc_sys::WslcContainerState> for ContainerState {
 
 pub(crate) struct ContainerInner {
     raw: NonNull<std::ffi::c_void>,
-    #[allow(dead_code)]
     session: Rc<crate::session::SessionInner>,
     init_capture: Option<CaptureRegistration>,
 }
@@ -448,6 +448,19 @@ impl std::fmt::Debug for Container {
 }
 
 impl Container {
+    pub(crate) fn from_opened(
+        raw: NonNull<std::ffi::c_void>,
+        session: Rc<crate::session::SessionInner>,
+    ) -> Self {
+        Self {
+            inner: Rc::new(ContainerInner {
+                raw,
+                session,
+                init_capture: None,
+            }),
+        }
+    }
+
     fn raw(&self) -> wslc_sys::WslcContainer {
         self.inner.raw.as_ptr()
     }
@@ -537,6 +550,16 @@ impl Container {
     pub fn delete(&self, options: DeleteContainerOptions) -> Result<()> {
         let sdk = raw::sdk()?;
         raw::map_result(sdk.delete_container(self.raw(), options.as_raw()))
+    }
+
+    /// Fetches logs for this container.
+    ///
+    /// The public C SDK does not yet expose container logs, so this helper uses
+    /// the `wslc container logs` CLI against the owning session name. Override
+    /// the executable with `WSLC_CLI_PATH` when needed.
+    pub fn logs(&self, options: LogsOptions) -> Result<ContainerLogs> {
+        let id = self.id()?;
+        logs::fetch_container_logs(&self.inner.session.name, &id, &options)
     }
 }
 

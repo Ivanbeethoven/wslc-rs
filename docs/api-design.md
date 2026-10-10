@@ -64,6 +64,8 @@ impl Session {
     pub fn tag_image(&self, image: impl AsRef<str>, repo: impl AsRef<str>, tag: impl AsRef<str>) -> Result<()>;
 
     pub fn container(&self, options: ContainerOptions) -> ContainerBuilder;
+    pub fn open_container(&self, name_or_id: impl AsRef<str>) -> Result<Container>;
+    pub fn logs(&self, container_id: impl AsRef<str>, options: LogsOptions) -> Result<ContainerLogs>;
 
     pub fn create_vhd_volume(&self, options: VhdOptions) -> Result<()>;
     pub fn delete_vhd_volume(&self, name: impl AsRef<str>) -> Result<()>;
@@ -200,9 +202,33 @@ impl Container {
     pub fn state(&self) -> Result<ContainerState>;
 
     pub fn exec(&self, options: ProcessOptions) -> Result<Process>;
+    pub fn logs(&self, options: LogsOptions) -> Result<ContainerLogs>;
 
     pub fn stop(&self, signal: Signal, timeout: Duration) -> Result<()>;
     pub fn delete(&self, options: DeleteContainerOptions) -> Result<()>;
+}
+```
+
+### Container logs
+
+The public C SDK (`wslcsdk.h`) does not yet export a logs API. The service COM /
+CLI surface does (`wslc container logs`, `IWSLCContainer::Logs`). The safe Rust
+wrapper therefore exposes `LogsOptions` / `ContainerLogs` and retrieves logs
+through the `wslc` CLI until a C export is available.
+
+```rust
+pub struct LogsOptions {
+    pub follow: bool,
+    pub timestamps: bool,
+    pub details: bool,
+    pub since: Option<i64>,
+    pub until: Option<i64>,
+    pub tail: Option<u64>,
+}
+
+pub struct ContainerLogs {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
 }
 ```
 

@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use wslc::{
     ComponentFlags, ContainerOptions, ContainerState, DeleteContainerOptions, Error,
-    ImageProgressStatus, ImagePullOptions, NetworkingMode, ProcessOptions, ProcessState, Service,
-    Session, Signal, Version, VhdOptions, VhdType, WslcErrorKind,
+    ImageProgressStatus, ImagePullOptions, LogsOptions, NetworkingMode, ProcessOptions,
+    ProcessState, Service, Session, Signal, Version, VhdOptions, VhdType, WslcErrorKind,
 };
 
 #[test]
@@ -74,6 +74,62 @@ fn container_options_reject_empty_and_nul_image_names() {
 #[test]
 fn delete_container_options_default_is_not_forceful() {
     assert!(!DeleteContainerOptions::default().force);
+}
+
+#[test]
+fn logs_options_validate_and_build_cli_args_before_loading_sdk() {
+    let err = LogsOptions::new().tail(0).validate().unwrap_err();
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("tail")));
+
+    let err = LogsOptions::new()
+        .since(10)
+        .until(5)
+        .validate()
+        .unwrap_err();
+    assert!(matches!(err, Error::InvalidInput(message) if message.contains("since")));
+
+    let args = LogsOptions::new()
+        .follow(true)
+        .timestamps(true)
+        .details(true)
+        .since(1)
+        .until(2)
+        .tail(3)
+        .to_cli_args("session-a", "container-b")
+        .expect("cli args");
+    let rendered: Vec<_> = args
+        .iter()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        rendered,
+        [
+            "--session",
+            "session-a",
+            "container",
+            "logs",
+            "--follow",
+            "--timestamps",
+            "--details",
+            "--since",
+            "1",
+            "--until",
+            "2",
+            "--tail",
+            "3",
+            "container-b",
+        ]
+    );
+    assert_eq!(
+        LogsOptions::new()
+            .follow(true)
+            .timestamps(true)
+            .details(true)
+            .as_flags(),
+        wslc_sys::WSLC_LOGS_FLAG_FOLLOW
+            | wslc_sys::WSLC_LOGS_FLAG_TIMESTAMPS
+            | wslc_sys::WSLC_LOGS_FLAG_DETAILS
+    );
 }
 
 #[test]
@@ -326,7 +382,10 @@ fn service_reports_missing_sdk_as_sdk_not_found_or_components() {
 
     if let Err(error) = result {
         assert!(
-            matches!(error, Error::SdkNotFound(_) | Error::MissingComponents(_)),
+            matches!(
+                error,
+                Error::SdkNotFound(_) | Error::MissingComponents(_) | Error::UnsupportedPlatform(_)
+            ),
             "unexpected error: {error:?}"
         );
     }
@@ -533,6 +592,7 @@ fn sdk_validation_examples_are_present() {
         "list_images.rs",
         "vhd_volume.rs",
         "container_inspect.rs",
+        "container_logs.rs",
     ];
 
     for example in examples {
