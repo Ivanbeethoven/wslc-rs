@@ -42,6 +42,8 @@ pub struct ProcessOptions {
     pub env: Vec<(String, String)>,
     /// Output mode.
     pub output_mode: OutputMode,
+    /// Enables standard input for the process.
+    pub enable_stdin: bool,
 }
 
 impl ProcessOptions {
@@ -56,7 +58,17 @@ impl ProcessOptions {
             working_dir: None,
             env: Vec::new(),
             output_mode: OutputMode::Null,
+            enable_stdin: false,
         }
+    }
+
+    /// Enables standard input.
+    ///
+    /// Without this flag the process observes an immediately closed stdin and
+    /// [`Process::io_handle`] cannot acquire `stdin`.
+    pub fn enable_stdin(mut self, enable: bool) -> Self {
+        self.enable_stdin = enable;
+        self
     }
 
     /// Sets the working directory.
@@ -182,6 +194,13 @@ impl ProcessOptions {
             raw::map_result(sdk.set_process_env_variables(&mut settings, env.pointers()))?;
         }
 
+        let flags = if self.enable_stdin {
+            wslc_sys::WSLC_PROCESS_FLAG_STDIN
+        } else {
+            wslc_sys::WSLC_PROCESS_FLAG_NONE
+        };
+        raw::map_result(sdk.set_process_flags(&mut settings, flags))?;
+
         if let Some(capture) = capture {
             raw::map_result(sdk.set_process_capture_callbacks(&mut settings, capture))?;
         }
@@ -192,6 +211,27 @@ impl ProcessOptions {
             _working_dir: working_dir,
             _env: env,
         })
+    }
+}
+
+/// Process standard IO stream.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProcessIo {
+    /// Standard input.
+    Stdin,
+    /// Standard output.
+    Stdout,
+    /// Standard error.
+    Stderr,
+}
+
+impl ProcessIo {
+    fn as_raw(self) -> wslc_sys::WslcProcessIOHandle {
+        match self {
+            Self::Stdin => wslc_sys::WslcProcessIOHandle::WSLC_PROCESS_IO_HANDLE_STDIN,
+            Self::Stdout => wslc_sys::WslcProcessIOHandle::WSLC_PROCESS_IO_HANDLE_STDOUT,
+            Self::Stderr => wslc_sys::WslcProcessIOHandle::WSLC_PROCESS_IO_HANDLE_STDERR,
+        }
     }
 }
 
@@ -329,6 +369,16 @@ impl Process {
             stderr: captured.stderr,
         })
     }
+
+    /// Returns a raw Windows `HANDLE` for a process IO stream.
+    ///
+    /// Callback-based capture consumes these handles; call this only when
+    /// callbacks were not registered. Stdin also requires
+    /// [`ProcessOptions::enable_stdin`].
+    pub fn io_handle(&self, io: ProcessIo) -> Result<wslc_sys::HANDLE> {
+        let sdk = raw::sdk()?;
+        raw::map_result(sdk.process_io_handle(self.inner.raw, io.as_raw()))
+    }
 }
 
 impl Drop for ProcessInner {
@@ -340,7 +390,8 @@ impl Drop for ProcessInner {
     }
 }
 
-pub(crate) type CaptureRegistration = raw::CaptureRegistration;
+/// Registration that owns process capture callback state.
+pub type CaptureRegistration = raw::CaptureRegistration;
 
 #[cfg(test)]
 mod tests {
@@ -359,6 +410,12 @@ mod tests {
             .capture_stdout()
             .inherit_output()
             .captures_output());
+        assert!(!ProcessOptions::new(["/bin/cat"]).enable_stdin);
+        assert!(
+            ProcessOptions::new(["/bin/cat"])
+                .enable_stdin(true)
+                .enable_stdin
+        );
     }
 
     #[test]

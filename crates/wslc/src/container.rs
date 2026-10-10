@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::logs::{self, ContainerLogs, LogsOptions};
 use crate::process::{CaptureRegistration, Output, Process, ProcessInner, ProcessOptions};
 use crate::{raw, registry, strings, Error, Result, Session};
 
@@ -132,6 +133,13 @@ struct VolumeMount {
     read_only: bool,
 }
 
+#[derive(Clone, Debug)]
+struct NamedVolumeMount {
+    name: String,
+    container_path: String,
+    read_only: bool,
+}
+
 /// Container builder.
 pub struct ContainerBuilder {
     session: Session,
@@ -144,6 +152,7 @@ pub struct ContainerBuilder {
     init_process: Option<ProcessOptions>,
     ports: Vec<PortMapping>,
     volumes: Vec<VolumeMount>,
+    named_volumes: Vec<NamedVolumeMount>,
 }
 
 impl ContainerBuilder {
@@ -159,6 +168,7 @@ impl ContainerBuilder {
             init_process: None,
             ports: Vec::new(),
             volumes: Vec::new(),
+            named_volumes: Vec::new(),
         }
     }
 
@@ -259,6 +269,34 @@ impl ContainerBuilder {
         self
     }
 
+    /// Adds a named session VHD volume mount.
+    pub fn named_volume(
+        mut self,
+        name: impl Into<String>,
+        container_path: impl Into<String>,
+    ) -> Self {
+        self.named_volumes.push(NamedVolumeMount {
+            name: name.into(),
+            container_path: container_path.into(),
+            read_only: false,
+        });
+        self
+    }
+
+    /// Adds a read-only named session VHD volume mount.
+    pub fn named_volume_read_only(
+        mut self,
+        name: impl Into<String>,
+        container_path: impl Into<String>,
+    ) -> Self {
+        self.named_volumes.push(NamedVolumeMount {
+            name: name.into(),
+            container_path: container_path.into(),
+            read_only: true,
+        });
+        self
+    }
+
     fn validate(&self) -> Result<()> {
         self.options.validate()?;
         for port in &self.ports {
@@ -278,6 +316,24 @@ impl ContainerBuilder {
                 return Err(Error::InvalidInput(
                     "windows volume path cannot be empty".to_owned(),
                 ));
+            }
+        }
+        for volume in &self.named_volumes {
+            if volume.name.trim().is_empty() {
+                return Err(Error::InvalidInput(
+                    "named volume name cannot be empty".to_owned(),
+                ));
+            }
+            if volume.name.contains('\0') {
+                return Err(Error::Nul("named volume name".to_owned()));
+            }
+            if volume.container_path.is_empty() || !volume.container_path.starts_with('/') {
+                return Err(Error::InvalidInput(
+                    "named volume container path must be absolute".to_owned(),
+                ));
+            }
+            if volume.container_path.contains('\0') {
+                return Err(Error::Nul("named volume container path".to_owned()));
             }
         }
         if let Some(process) = &self.init_process {
@@ -377,6 +433,30 @@ impl ContainerBuilder {
             raw::map_result(sdk.set_container_volumes(&mut settings, &raw_volumes))?;
         }
 
+        let named_names = strings::cstrings(
+            self.named_volumes.iter().map(|volume| volume.name.as_str()),
+            "named volume name",
+        )?;
+        let named_paths = strings::cstrings(
+            self.named_volumes
+                .iter()
+                .map(|volume| volume.container_path.as_str()),
+            "named volume container path",
+        )?;
+        let raw_named_volumes: Vec<_> = self
+            .named_volumes
+            .iter()
+            .enumerate()
+            .map(|(index, volume)| wslc_sys::WslcContainerNamedVolume {
+                name: named_names[index].as_ptr(),
+                containerPath: named_paths[index].as_ptr(),
+                readOnly: i32::from(volume.read_only),
+            })
+            .collect();
+        if !raw_named_volumes.is_empty() {
+            raw::map_result(sdk.set_container_named_volumes(&mut settings, &raw_named_volumes))?;
+        }
+
         let raw_container = raw::map_result(sdk.create_container(self.session.raw(), &settings))?;
         let raw = NonNull::new(raw_container).ok_or_else(|| {
             Error::from_hresult(
@@ -431,7 +511,6 @@ impl From<wslc_sys::WslcContainerState> for ContainerState {
 
 pub(crate) struct ContainerInner {
     raw: NonNull<std::ffi::c_void>,
-    #[allow(dead_code)]
     session: Rc<crate::session::SessionInner>,
     init_capture: Option<CaptureRegistration>,
 }
@@ -448,6 +527,19 @@ impl std::fmt::Debug for Container {
 }
 
 impl Container {
+    pub(crate) fn from_opened(
+        raw: NonNull<std::ffi::c_void>,
+        session: Rc<crate::session::SessionInner>,
+    ) -> Self {
+        Self {
+            inner: Rc::new(ContainerInner {
+                raw,
+                session,
+                init_capture: None,
+            }),
+        }
+    }
+
     fn raw(&self) -> wslc_sys::WslcContainer {
         self.inner.raw.as_ptr()
     }
@@ -537,6 +629,44 @@ impl Container {
     pub fn delete(&self, options: DeleteContainerOptions) -> Result<()> {
         let sdk = raw::sdk()?;
         raw::map_result(sdk.delete_container(self.raw(), options.as_raw()))
+    }
+
+    /// Fetches logs for this container.
+    ///
+    /// The public C SDK does not yet expose container logs, so this helper uses
+    /// the `wslc container logs` CLI against the owning session name. Override
+    /// the executable with `WSLC_CLI_PATH` when needed.
+    pub fn logs(&self, options: LogsOptions) -> Result<ContainerLogs> {
+        let id = self.id()?;
+        logs::fetch_container_logs(&self.inner.session.name, &id, &options)
+    }
+
+    /// Returns the container init process.
+    pub fn init_process(&self) -> Result<Process> {
+        let sdk = raw::sdk()?;
+        let raw_process = raw::map_result(sdk.container_init_process(self.raw()))?;
+        let raw = NonNull::new(raw_process).ok_or_else(|| {
+            Error::from_hresult(
+                wslc_sys::S_OK,
+                "WslcGetContainerInitProcess returned a null process",
+            )
+        })?;
+        Ok(Process {
+            inner: Rc::new(ProcessInner {
+                raw: raw.as_ptr(),
+                capture: None,
+            }),
+        })
+    }
+
+    /// Registers capture callbacks on the container init process.
+    ///
+    /// Must be called before [`Container::start_attached`].
+    pub fn set_init_process_capture(&self) -> Result<CaptureRegistration> {
+        let sdk = raw::sdk()?;
+        let capture = CaptureRegistration::new();
+        raw::map_result(sdk.set_container_init_process_capture_callbacks(self.raw(), &capture))?;
+        Ok(capture)
     }
 }
 

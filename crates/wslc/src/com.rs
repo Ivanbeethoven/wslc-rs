@@ -1,8 +1,5 @@
 use crate::{raw, Error, Result};
 
-const COINIT_MULTITHREADED: u32 = 0;
-const RPC_E_CHANGED_MODE: i32 = 0x8001_0106_u32 as i32;
-
 /// Guard returned by [`initialize_mta`].
 #[derive(Debug)]
 pub struct ComGuard {
@@ -18,7 +15,19 @@ impl Drop for ComGuard {
 }
 
 /// Initializes COM as MTA on the current thread.
+#[cfg(not(windows))]
 pub fn initialize_mta() -> Result<ComGuard> {
+    Err(Error::UnsupportedPlatform(
+        "WSLC requires a Windows host target",
+    ))
+}
+
+/// Initializes COM as MTA on the current thread.
+#[cfg(windows)]
+pub fn initialize_mta() -> Result<ComGuard> {
+    const COINIT_MULTITHREADED: u32 = 0;
+    const RPC_E_CHANGED_MODE: i32 = 0x8001_0106_u32 as i32;
+
     let hr = raw::co_initialize_ex(std::ptr::null_mut(), COINIT_MULTITHREADED);
     match hr {
         0 | 1 => Ok(ComGuard {
@@ -39,7 +48,7 @@ pub fn initialize_mta() -> Result<ComGuard> {
 pub(crate) fn try_initialize_mta() -> Result<Option<ComGuard>> {
     match initialize_mta() {
         Ok(guard) => Ok(Some(guard)),
-        Err(Error::ComInitialization { code, .. }) if code == RPC_E_CHANGED_MODE => Ok(None),
+        Err(Error::ComInitialization { code, .. }) if code == 0x8001_0106_u32 as i32 => Ok(None),
         Err(error) => Err(error),
     }
 }

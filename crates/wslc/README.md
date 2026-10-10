@@ -69,6 +69,21 @@ $env:WSLC_REGISTRY_MIRROR = "<your-registry>"
 For a specific registry, use a variable such as
 `WSLC_REGISTRY_MIRROR_GHCR_IO`.
 
+## Container Logs
+
+The public C SDK does not yet export container logs. This crate still exposes a
+Rust API that matches the CLI / service surface:
+
+```rust
+use wslc::LogsOptions;
+
+let logs = container.logs(LogsOptions::new().timestamps(true).tail(100))?;
+println!("{}", logs.stdout_lossy());
+```
+
+Under the hood this invokes `wslc --session <name> container logs ...`. Override
+the executable path with `WSLC_CLI_PATH` when `wslc` is not on `PATH`.
+
 ## Testing
 
 ```powershell

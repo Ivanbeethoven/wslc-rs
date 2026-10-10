@@ -126,6 +126,7 @@ impl Default for CaptureRegistration {
 }
 
 struct Library {
+    #[cfg_attr(not(windows), allow(dead_code))]
     handle: NonNull<c_void>,
 }
 
@@ -164,6 +165,14 @@ impl Library {
 
         Ok(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&ptr) })
     }
+
+    #[cfg(not(windows))]
+    unsafe fn get<T: Copy>(&self, _symbol: &'static [u8]) -> Result<T> {
+        let _ = self;
+        Err(Error::UnsupportedPlatform(
+            "WSLC requires a Windows host target",
+        ))
+    }
 }
 
 unsafe impl Send for Library {}
@@ -189,10 +198,15 @@ pub struct Sdk {
     WslcSetSessionSettingsTimeout: WslcSetSessionSettingsTimeoutFn,
     WslcSetSessionSettingsVhd: WslcSetSessionSettingsVhdFn,
     WslcSetSessionSettingsFeatureFlags: WslcSetSessionSettingsFeatureFlagsFn,
+    WslcGetSessionTerminationEvent: WslcGetSessionTerminationEventFn,
+    WslcGetSessionTerminationReason: WslcGetSessionTerminationReasonFn,
     WslcTerminateSession: WslcTerminateSessionFn,
     WslcReleaseSession: WslcReleaseSessionFn,
+    WslcRegisterSessionCrashDumpCallback: WslcRegisterSessionCrashDumpCallbackFn,
+    WslcReleaseCrashDumpSubscription: WslcReleaseCrashDumpSubscriptionFn,
     WslcInitContainerSettings: WslcInitContainerSettingsFn,
     WslcCreateContainer: WslcCreateContainerFn,
+    WslcOpenContainer: WslcOpenContainerFn,
     WslcStartContainer: WslcStartContainerFn,
     WslcSetContainerSettingsName: WslcSetContainerSettingsNameFn,
     WslcSetContainerSettingsInitProcess: WslcSetContainerSettingsInitProcessFn,
@@ -203,6 +217,7 @@ pub struct Sdk {
     WslcSetContainerSettingsPortMappings: WslcSetContainerSettingsPortMappingsFn,
     WslcSetContainerSettingsVolumes: WslcSetContainerSettingsVolumesFn,
     WslcSetContainerSettingsNamedVolumes: WslcSetContainerSettingsNamedVolumesFn,
+    WslcSetContainerInitProcessIOCallbacks: WslcSetContainerInitProcessIOCallbacksFn,
     WslcCreateContainerProcess: WslcCreateContainerProcessFn,
     WslcReleaseContainer: WslcReleaseContainerFn,
     WslcGetContainerID: WslcGetContainerIDFn,
@@ -215,16 +230,24 @@ pub struct Sdk {
     WslcSetProcessSettingsWorkingDirectory: WslcSetProcessSettingsWorkingDirectoryFn,
     WslcSetProcessSettingsCmdLine: WslcSetProcessSettingsCmdLineFn,
     WslcSetProcessSettingsEnvVariables: WslcSetProcessSettingsEnvVariablesFn,
+    WslcSetProcessSettingsFlags: WslcSetProcessSettingsFlagsFn,
     WslcSetProcessSettingsCallbacks: WslcSetProcessSettingsCallbacksFn,
     WslcGetProcessPid: WslcGetProcessPidFn,
     WslcGetProcessExitEvent: WslcGetProcessExitEventFn,
     WslcGetProcessState: WslcGetProcessStateFn,
     WslcGetProcessExitCode: WslcGetProcessExitCodeFn,
     WslcSignalProcess: WslcSignalProcessFn,
+    WslcGetProcessIOHandle: WslcGetProcessIOHandleFn,
     WslcReleaseProcess: WslcReleaseProcessFn,
     WslcPullSessionImage: WslcPullSessionImageFn,
+    WslcImportSessionImage: WslcImportSessionImageFn,
+    WslcImportSessionImageFromFile: WslcImportSessionImageFromFileFn,
+    WslcLoadSessionImage: WslcLoadSessionImageFn,
+    WslcLoadSessionImageFromFile: WslcLoadSessionImageFromFileFn,
     WslcDeleteSessionImage: WslcDeleteSessionImageFn,
     WslcTagSessionImage: WslcTagSessionImageFn,
+    WslcPushSessionImage: WslcPushSessionImageFn,
+    WslcSessionAuthenticate: WslcSessionAuthenticateFn,
     WslcListSessionImages: WslcListSessionImagesFn,
     WslcCreateSessionVhdVolume: WslcCreateSessionVhdVolumeFn,
     WslcDeleteSessionVhdVolume: WslcDeleteSessionVhdVolumeFn,
@@ -252,10 +275,15 @@ impl Sdk {
             WslcSetSessionSettingsTimeout: sym!(WslcSetSessionSettingsTimeout),
             WslcSetSessionSettingsVhd: sym!(WslcSetSessionSettingsVhd),
             WslcSetSessionSettingsFeatureFlags: sym!(WslcSetSessionSettingsFeatureFlags),
+            WslcGetSessionTerminationEvent: sym!(WslcGetSessionTerminationEvent),
+            WslcGetSessionTerminationReason: sym!(WslcGetSessionTerminationReason),
             WslcTerminateSession: sym!(WslcTerminateSession),
             WslcReleaseSession: sym!(WslcReleaseSession),
+            WslcRegisterSessionCrashDumpCallback: sym!(WslcRegisterSessionCrashDumpCallback),
+            WslcReleaseCrashDumpSubscription: sym!(WslcReleaseCrashDumpSubscription),
             WslcInitContainerSettings: sym!(WslcInitContainerSettings),
             WslcCreateContainer: sym!(WslcCreateContainer),
+            WslcOpenContainer: sym!(WslcOpenContainer),
             WslcStartContainer: sym!(WslcStartContainer),
             WslcSetContainerSettingsName: sym!(WslcSetContainerSettingsName),
             WslcSetContainerSettingsInitProcess: sym!(WslcSetContainerSettingsInitProcess),
@@ -266,6 +294,7 @@ impl Sdk {
             WslcSetContainerSettingsPortMappings: sym!(WslcSetContainerSettingsPortMappings),
             WslcSetContainerSettingsVolumes: sym!(WslcSetContainerSettingsVolumes),
             WslcSetContainerSettingsNamedVolumes: sym!(WslcSetContainerSettingsNamedVolumes),
+            WslcSetContainerInitProcessIOCallbacks: sym!(WslcSetContainerInitProcessIOCallbacks),
             WslcCreateContainerProcess: sym!(WslcCreateContainerProcess),
             WslcReleaseContainer: sym!(WslcReleaseContainer),
             WslcGetContainerID: sym!(WslcGetContainerID),
@@ -278,16 +307,24 @@ impl Sdk {
             WslcSetProcessSettingsWorkingDirectory: sym!(WslcSetProcessSettingsWorkingDirectory),
             WslcSetProcessSettingsCmdLine: sym!(WslcSetProcessSettingsCmdLine),
             WslcSetProcessSettingsEnvVariables: sym!(WslcSetProcessSettingsEnvVariables),
+            WslcSetProcessSettingsFlags: sym!(WslcSetProcessSettingsFlags),
             WslcSetProcessSettingsCallbacks: sym!(WslcSetProcessSettingsCallbacks),
             WslcGetProcessPid: sym!(WslcGetProcessPid),
             WslcGetProcessExitEvent: sym!(WslcGetProcessExitEvent),
             WslcGetProcessState: sym!(WslcGetProcessState),
             WslcGetProcessExitCode: sym!(WslcGetProcessExitCode),
             WslcSignalProcess: sym!(WslcSignalProcess),
+            WslcGetProcessIOHandle: sym!(WslcGetProcessIOHandle),
             WslcReleaseProcess: sym!(WslcReleaseProcess),
             WslcPullSessionImage: sym!(WslcPullSessionImage),
+            WslcImportSessionImage: sym!(WslcImportSessionImage),
+            WslcImportSessionImageFromFile: sym!(WslcImportSessionImageFromFile),
+            WslcLoadSessionImage: sym!(WslcLoadSessionImage),
+            WslcLoadSessionImageFromFile: sym!(WslcLoadSessionImageFromFile),
             WslcDeleteSessionImage: sym!(WslcDeleteSessionImage),
             WslcTagSessionImage: sym!(WslcTagSessionImage),
+            WslcPushSessionImage: sym!(WslcPushSessionImage),
+            WslcSessionAuthenticate: sym!(WslcSessionAuthenticate),
             WslcListSessionImages: sym!(WslcListSessionImages),
             WslcCreateSessionVhdVolume: sym!(WslcCreateSessionVhdVolume),
             WslcDeleteSessionVhdVolume: sym!(WslcDeleteSessionVhdVolume),
@@ -612,6 +649,17 @@ impl Sdk {
         Ok(container)
     }
 
+    /// Opens an existing container by name, full ID, or unambiguous ID prefix.
+    pub fn open_container(&self, session: WslcSession, name_or_id: PCSTR) -> Result<WslcContainer> {
+        let mut container = std::ptr::null_mut();
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcOpenContainer)(session, name_or_id, &mut container, &mut error_message)
+        };
+        check_hr(hr, error_message)?;
+        Ok(container)
+    }
+
     /// Releases a container handle.
     pub fn release_container(&self, container: WslcContainer) -> Result<()> {
         let hr = unsafe { (self.WslcReleaseContainer)(container) };
@@ -790,17 +838,281 @@ impl Sdk {
         Ok(event)
     }
 
+    /// Returns a process IO handle.
+    pub fn process_io_handle(
+        &self,
+        process: WslcProcess,
+        io_handle: WslcProcessIOHandle,
+    ) -> Result<HANDLE> {
+        let mut handle = std::ptr::null_mut();
+        let hr = unsafe { (self.WslcGetProcessIOHandle)(process, io_handle, &mut handle) };
+        check_hr(hr, std::ptr::null_mut())?;
+        Ok(handle)
+    }
+
     /// Releases a process handle.
     pub fn release_process(&self, process: WslcProcess) -> Result<()> {
         let hr = unsafe { (self.WslcReleaseProcess)(process) };
         check_hr(hr, std::ptr::null_mut())
     }
+
+    /// Sets process flags.
+    pub fn set_process_flags(
+        &self,
+        settings: &mut WslcProcessSettings,
+        flags: WslcProcessFlags,
+    ) -> Result<()> {
+        let hr = unsafe { (self.WslcSetProcessSettingsFlags)(settings, flags) };
+        check_hr(hr, std::ptr::null_mut())
+    }
+
+    /// Sets init-process IO callbacks on an existing container.
+    pub fn set_container_init_process_capture_callbacks(
+        &self,
+        container: WslcContainer,
+        capture: &CaptureRegistration,
+    ) -> Result<()> {
+        let callbacks = WslcProcessCallbacks {
+            onStdOut: Some(stdio_trampoline),
+            onStdErr: Some(stdio_trampoline),
+            onExit: Some(exit_trampoline),
+        };
+        let hr = unsafe {
+            (self.WslcSetContainerInitProcessIOCallbacks)(container, &callbacks, capture.context())
+        };
+        check_hr(hr, std::ptr::null_mut())
+    }
+
+    /// Returns the container init process handle.
+    pub fn container_init_process(&self, container: WslcContainer) -> Result<WslcProcess> {
+        let mut process = std::ptr::null_mut();
+        let hr = unsafe { (self.WslcGetContainerInitProcess)(container, &mut process) };
+        check_hr(hr, std::ptr::null_mut())?;
+        Ok(process)
+    }
+
+    /// Sets named volume mounts on container settings.
+    pub fn set_container_named_volumes(
+        &self,
+        settings: &mut WslcContainerSettings,
+        volumes: &[WslcContainerNamedVolume],
+    ) -> Result<()> {
+        let hr = unsafe {
+            (self.WslcSetContainerSettingsNamedVolumes)(
+                settings,
+                if volumes.is_empty() {
+                    std::ptr::null()
+                } else {
+                    volumes.as_ptr()
+                },
+                volumes.len() as u32,
+            )
+        };
+        check_hr(hr, std::ptr::null_mut())
+    }
+
+    /// Returns the session termination waitable event.
+    pub fn session_termination_event(&self, session: WslcSession) -> Result<HANDLE> {
+        let mut event = std::ptr::null_mut();
+        let hr = unsafe { (self.WslcGetSessionTerminationEvent)(session, &mut event) };
+        check_hr(hr, std::ptr::null_mut())?;
+        Ok(event)
+    }
+
+    /// Returns the session termination reason.
+    pub fn session_termination_reason(
+        &self,
+        session: WslcSession,
+    ) -> Result<WslcSessionTerminationReason> {
+        let mut reason = WslcSessionTerminationReason::WSLC_SESSION_TERMINATION_REASON_UNKNOWN;
+        let hr = unsafe { (self.WslcGetSessionTerminationReason)(session, &mut reason) };
+        check_hr(hr, std::ptr::null_mut())?;
+        Ok(reason)
+    }
+
+    /// Registers a crash dump callback.
+    ///
+    /// The returned registration owns both the SDK subscription and the
+    /// callback closure for as long as it remains alive.
+    pub fn register_session_crash_dump_callback<F>(
+        &self,
+        session: WslcSession,
+        callback: F,
+    ) -> Result<CrashDumpRegistration>
+    where
+        F: FnMut(CrashDumpInfo) + Send + 'static,
+    {
+        let callback = Box::into_raw(Box::new(Box::new(callback) as CrashDumpCallback));
+        let mut subscription = std::ptr::null_mut();
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcRegisterSessionCrashDumpCallback)(
+                session,
+                Some(crash_dump_trampoline),
+                callback.cast(),
+                &mut subscription,
+                &mut error_message,
+            )
+        };
+        if let Err(error) = check_hr(hr, error_message) {
+            unsafe {
+                drop(Box::from_raw(callback));
+            }
+            return Err(error);
+        }
+        Ok(CrashDumpRegistration {
+            subscription,
+            callback,
+        })
+    }
+
+    /// Releases a crash dump subscription handle.
+    pub fn release_crash_dump_subscription(
+        &self,
+        subscription: WslcCrashDumpSubscription,
+    ) -> Result<()> {
+        let hr = unsafe { (self.WslcReleaseCrashDumpSubscription)(subscription) };
+        check_hr(hr, std::ptr::null_mut())
+    }
+
+    /// Imports an image from a file path.
+    pub fn import_session_image_from_file(
+        &self,
+        session: WslcSession,
+        image_name: PCSTR,
+        path: PCWSTR,
+    ) -> Result<()> {
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcImportSessionImageFromFile)(
+                session,
+                image_name,
+                path,
+                std::ptr::null(),
+                &mut error_message,
+            )
+        };
+        check_hr(hr, error_message)
+    }
+
+    /// Loads an image archive from a file path.
+    pub fn load_session_image_from_file(&self, session: WslcSession, path: PCWSTR) -> Result<()> {
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcLoadSessionImageFromFile)(session, path, std::ptr::null(), &mut error_message)
+        };
+        check_hr(hr, error_message)
+    }
+
+    /// Pushes an image to a registry.
+    pub fn push_session_image(
+        &self,
+        session: WslcSession,
+        image: PCSTR,
+        registry_auth: PCSTR,
+    ) -> Result<()> {
+        let options = WslcPushImageOptions {
+            image,
+            registryAuth: registry_auth,
+            progressCallback: None,
+            progressCallbackContext: std::ptr::null_mut(),
+        };
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe { (self.WslcPushSessionImage)(session, &options, &mut error_message) };
+        check_hr(hr, error_message)
+    }
+
+    /// Authenticates with a registry and returns the identity token string.
+    pub fn session_authenticate(
+        &self,
+        session: WslcSession,
+        server_address: PCSTR,
+        username: PCSTR,
+        password: PCSTR,
+    ) -> Result<(String, WslcIdentityTokenType)> {
+        let mut identity_token = std::ptr::null_mut();
+        let mut token_type = WslcIdentityTokenType::WSLC_IDENTITY_TOKEN_TYPE_UNKNOWN;
+        let mut error_message = std::ptr::null_mut();
+        let hr = unsafe {
+            (self.WslcSessionAuthenticate)(
+                session,
+                server_address,
+                username,
+                password,
+                &mut identity_token,
+                &mut token_type,
+                &mut error_message,
+            )
+        };
+        check_hr(hr, error_message)?;
+        let value = c_ptr_to_string(identity_token)?;
+        free_cotaskmem(identity_token.cast());
+        Ok((value, token_type))
+    }
+}
+
+/// Crash dump information delivered to a registered callback.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CrashDumpInfo {
+    /// Dump file path.
+    pub dump_path: String,
+    /// Process name.
+    pub process_name: String,
+    /// Process ID.
+    pub pid: u32,
+    /// Signal value.
+    pub signal: u32,
+    /// Timestamp.
+    pub timestamp: u64,
+}
+
+type CrashDumpCallback = Box<dyn FnMut(CrashDumpInfo) + Send>;
+
+/// Owns a crash dump subscription and its callback.
+pub struct CrashDumpRegistration {
+    subscription: WslcCrashDumpSubscription,
+    callback: *mut CrashDumpCallback,
+}
+
+unsafe impl Send for CrashDumpRegistration {}
+
+impl CrashDumpRegistration {
+    /// Returns the raw SDK subscription handle.
+    pub fn raw(&self) -> WslcCrashDumpSubscription {
+        self.subscription
+    }
+}
+
+impl Drop for CrashDumpRegistration {
+    fn drop(&mut self) {
+        if let Ok(sdk) = sdk() {
+            let _ = sdk.release_crash_dump_subscription(self.subscription);
+        }
+        if !self.callback.is_null() {
+            unsafe {
+                drop(Box::from_raw(self.callback));
+            }
+            self.callback = std::ptr::null_mut();
+        }
+    }
 }
 
 /// Returns the process-global loaded SDK function table.
+///
+/// Successful loads are cached. Failures are **not** — callers that repair
+/// / redownload `wslcsdk.dll` must be able to call `Sdk::load` again.
 pub fn sdk() -> Result<&'static Sdk> {
-    static SDK: OnceLock<Result<Sdk>> = OnceLock::new();
-    SDK.get_or_init(Sdk::load).as_ref().map_err(clone_error)
+    static SDK: OnceLock<Sdk> = OnceLock::new();
+    if let Some(sdk) = SDK.get() {
+        return Ok(sdk);
+    }
+    static LOAD: Mutex<()> = Mutex::new(());
+    let _guard = LOAD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(sdk) = SDK.get() {
+        return Ok(sdk);
+    }
+    let loaded = Sdk::load()?;
+    Ok(SDK.get_or_init(|| loaded))
 }
 
 /// Initializes COM on the current thread.
@@ -869,23 +1181,6 @@ fn succeeded(hr: HRESULT) -> bool {
     hr >= 0
 }
 
-fn clone_error(error: &Error) -> Error {
-    match error {
-        Error::UnsupportedPlatform(value) => Error::UnsupportedPlatform(value),
-        Error::SdkNotFound(value) => Error::SdkNotFound(value.clone()),
-        Error::ComInitialization { code, message } => Error::ComInitialization {
-            code: *code,
-            message: message.clone(),
-        },
-        Error::HResult { code, message } => Error::HResult {
-            code: *code,
-            message: message.clone(),
-        },
-        Error::InvalidInput(value) => Error::InvalidInput(value.clone()),
-        Error::Utf8(value) => Error::InvalidInput(value.to_string()),
-    }
-}
-
 fn free_cotaskmem(ptr: *mut c_void) {
     if ptr.is_null() {
         return;
@@ -921,15 +1216,6 @@ fn wide_os(value: &OsStr) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
 
     value.encode_wide().chain(std::iter::once(0)).collect()
-}
-
-#[cfg(not(windows))]
-fn wide_os(value: &OsStr) -> Vec<u16> {
-    value
-        .to_string_lossy()
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect()
 }
 
 unsafe extern "system" fn install_trampoline<F>(
@@ -1006,4 +1292,23 @@ unsafe extern "system" fn exit_trampoline(exit_code: i32, context: PVOID) {
         capture.status = Some(exit_code);
         state.1.notify_all();
     }
+}
+
+unsafe extern "system" fn crash_dump_trampoline(
+    info: *const WslcSessionCrashDumpInfo,
+    context: PVOID,
+) {
+    if info.is_null() || context.is_null() {
+        return;
+    }
+    let info = unsafe { &*info };
+    let event = CrashDumpInfo {
+        dump_path: utf16_ptr_to_string(info.dumpPath),
+        process_name: c_ptr_to_string(info.processName).unwrap_or_default(),
+        pid: info.pid,
+        signal: info.signal,
+        timestamp: info.timestamp,
+    };
+    let callback = unsafe { &mut *(context as *mut CrashDumpCallback) };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(event)));
 }
